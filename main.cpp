@@ -24,11 +24,37 @@ DWORD WINAPI ThreadFunc(LPVOID n)
     //return (DWORD)n * 10;
     return 0;
 }
+class ThreadObject {
+    HANDLE hThread;
+    public: DWORD exitCode;
+    DWORD threadId;
+    DWORD initSeed;
+    public: int isThreadDone() {
+        GetExitCodeThread(hThread, &exitCode);
+        if ( exitCode == STILL_ACTIVE ) {
+            printf("Thread %d is still running!\n", initSeed);
+            return 0;
+        }
+        return 1;
+    }
+    public: void startThread(DWORD seed) {
+        initSeed=seed;
+        hThread = CreateThread(NULL, 0, ThreadFunc, (LPVOID)initSeed, 0, &threadId );
+        if (hThread)
+            printf("Thread %d launched\n", initSeed);
+    }
+    public: void stopThread() {
+        CloseHandle(hThread);
+        printf("Thread %d returned %d\n", initSeed, exitCode);
+    }
+};
+
 HANDLE hThrd1;
 HANDLE hThrd2;
 DWORD exitCode1 = 0;
 DWORD exitCode2 = 0;
 DWORD threadId1, threadId2;
+ThreadObject thredObj;
 void startThreads(void) {
     hThrd1 = CreateThread(NULL, 0, ThreadFunc, (LPVOID)1, 0, &threadId1 );
     if (hThrd1)
@@ -37,6 +63,8 @@ void startThreads(void) {
     hThrd2 = CreateThread(NULL, 0, ThreadFunc, (LPVOID)200, 0, &threadId2 );
     if(hThrd2)
         printf("Thread 2 launched\n");
+
+    thredObj.startThread(100);
 }
 int isThreadAllDone(void) {
         GetExitCodeThread(hThrd1, &exitCode1);
@@ -45,7 +73,7 @@ int isThreadAllDone(void) {
             puts("Thread 1 is still running!");
         if ( exitCode2 == STILL_ACTIVE )
             puts("Thread 2 is still running!");
-        if ( exitCode1 != STILL_ACTIVE && exitCode2 != STILL_ACTIVE )
+        if ( exitCode1 != STILL_ACTIVE && exitCode2 != STILL_ACTIVE &&thredObj.isThreadDone())
             return 1;
         return 0;
 }
@@ -54,6 +82,7 @@ void closeThreads(void) {
     CloseHandle(hThrd2);
     printf("Thread 1 returned %d\n", exitCode1);
     printf("Thread 2 returned %d\n", exitCode2);
+    thredObj.stopThread();
 }
 int waitThreadAlldone(void)
 {
