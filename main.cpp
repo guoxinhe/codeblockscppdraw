@@ -12,13 +12,18 @@
 
 #define WIN32_LEAN_AND_MEAN
 int mainLive=1;
+HWND hwndMain=NULL;
+void checkDirty(HWND hwnd);
 
 DWORD WINAPI ThreadFunc(LPVOID n)
 {
     int nrLoop=0;
     while(mainLive>0) {
         Sleep(10*(DWORD)n);//in ms
-        printf("thread[%d] loop %d waiting for next loop\n", (DWORD)n, nrLoop++);
+        if((DWORD)n==1 && hwndMain!=NULL)
+            checkDirty(hwndMain);
+        //else
+        //    printf("thread[%d] loop %d waiting for next loop\n", (DWORD)n, nrLoop++);
     }
     //Sleep((DWORD)n*1000*2);
     //return (DWORD)n * 10;
@@ -165,12 +170,12 @@ int WINAPI WinMain (HINSTANCE hThisInstance,
         TranslateMessage(&messages);
         /* Send message to WindowProcedure */
         DispatchMessage(&messages);
-        printf("Main thread loop %d waiting for next message\n", nrLoop++);
+        //printf("Main thread loop %d waiting for next message\n", nrLoop++);
     }
     waitThreadAlldone();
     printf("Press enter to continue\n");
     fflush(stdout);
-    getchar();
+    //getchar();
 
     /* The program return-value is 0 - The value that PostQuitMessage() gave */
     return messages.wParam;
@@ -255,6 +260,18 @@ void drawSineWave(HDC hdc) {
 		}
 		Polyline(hdc, apt, NUM);
 }
+void FillWindowToColor(HDC hdc, int color) {
+	HBRUSH		hBrush;
+	RECT		rect;
+
+	if (cxClient == 0 || cyClient == 0)
+		return;
+
+	SetRect(&rect, 0, 0, cxClient, cyClient);
+ 	hBrush = CreateSolidBrush(RGB(color&0xFF, (color>>8)&0xFF,(color>>16)&0xFF));
+ 	FillRect(hdc, &rect, hBrush);
+	DeleteObject(hBrush);
+}
 void RandomFillRect(HDC hdc)
 {
 	HBRUSH		hBrush;
@@ -272,21 +289,28 @@ void RandomFillRect(HDC hdc)
 
 void onDraw(HWND hwnd)
 {
+    static int debugCount=0,onDrawCount=0;
     //document: https://blog.csdn.net/wowocpp/article/details/79299016
     HDC         hdc;
     PAINTSTRUCT ps;
     //在处理WM_PAINT消息时使用BeginPaint函数和EndPaint函数：
     hdc = BeginPaint(hwnd, &ps);                         // 1
+    printf("onDraw ordered %d\n",onDrawCount++);
+    /*
     drawMiscShape(hdc);
     drawSineWave(hdc);
+    char msg[256];
+
     if(guiDirty>0)
-        TextOut(hdc, 0, 0, _T("Dirty World!"), _tcslen(_T("Dirty World!")));
+        sprintf(msg,"    %s #%d    guiDirty=%d    ","Dirty World!", debugCount++, guiDirty);
     else
-        TextOut(hdc, 0, 0, _T("Hello World!"), _tcslen(_T("Hello World!")));
+        sprintf(msg,"    %s #%d     ","Hello World!", debugCount++);
+    TextOut(hdc, 0, 0, _T(msg), _tcslen(_T(msg)));
     Rectangle(hdc, 50, 50, 200, 200);                    // 2
     Rectangle(hdc, 300, 50, 500, 200);                   // 3
     Ellipse(hdc, 50, 50, 200, 200);                      // 4
     Ellipse(hdc, 300, 200, 500, 50);                     // 5
+    */
     EndPaint(hwnd, &ps);                                 // 6
 }
 enum DrawType_e
@@ -298,6 +322,7 @@ enum DrawType_e
 void checkDirty(HWND hwnd)
 {
     if(guiDirty>0) {
+        guiDirty=0;
         //force update GUI.
         HDC         hdc;
         //在处理非WM_PAINT消息时由Windows程序获取：
@@ -306,6 +331,7 @@ void checkDirty(HWND hwnd)
         //hdc = GetWindowDC(hwnd);
         //获取当前整个屏幕的设备环境句柄：
         //hdc = CreateDC(TEXT("DISPLAY"), NULL, NULL, NULL);
+        FillWindowToColor(hdc, 0xFF);
 
         RandomFillRect(hdc);
         drawRaginTest(hdc);
@@ -335,6 +361,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 {
     guiDirty=0;
     msgCount++;
+    hwndMain = hwnd;
     switch (message)                  /* handle the messages */
     {
 
@@ -346,6 +373,17 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
         case WM_CLOSE:
             DestroyWindow(hwnd);
             break;
+        case WM_DESTROY:
+            PostQuitMessage (0);       /* send a WM_QUIT to the message queue */
+            break;
+        case WM_PAINT:
+            //guiDirty++;
+            //checkDirty(hwnd);
+            onDraw(hwnd);
+            printf("Here is a WM_PAINT 0x%03X ordered %d\n",message, msgCount++);
+            break;
+
+        //mouse event
         case WM_LBUTTONDOWN:
             ptBegin.x = LOWORD(lParam);
             ptBegin.y = HIWORD(lParam);
@@ -361,12 +399,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
             ptMove.y = HIWORD(lParam);
             printf("Here is a Mouse move message 0x%03X %d %d\n",message, ptMove.x, ptMove.y);
             break;
-        case WM_DESTROY:
-            PostQuitMessage (0);       /* send a WM_QUIT to the message queue */
-            break;
-        case WM_PAINT:
-            onDraw(hwnd);
-            break;
+
         case WM_NCHITTEST: //0x84,132
         case MF_MENUBARBREAK://0x32, 32
         case WM_NCMOUSEMOVE://0xA0,160, cursor on border for change size
@@ -377,7 +410,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
             printf("Here is a message 0x%03X ignored\n",message);
             return DefWindowProc (hwnd, message, wParam, lParam);
     }
-    checkDirty(hwnd);
+    //checkDirty(hwnd);
 
     return 0;
 }
