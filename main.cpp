@@ -1,3 +1,15 @@
+/**
+ * ruds branch
+ * Thread 1: Render data to buffer
+ * Thread 2: User control, mostly the major thread
+ * Thread 3: Display buffer to device
+ * Thread 4: Service
+ */
+
+
+
+
+
 #if defined(UNICODE) && !defined(_UNICODE)
     #define _UNICODE
 #elif defined(_UNICODE) && !defined(UNICODE)
@@ -9,89 +21,116 @@
 #include <stdio.h>
 #include <math.h>//for sin(float);
 
+#define exInc(pLong) InterlockedIncrement((volatile LONG *)pLong)            //++
+#define exDec(pLong) InterlockedDecrement((volatile LONG *)pLong)            //--
+#define exAdd(pLong,val) InterlockedExchangeAdd((volatile LONG *)pLong, val) //+=
+#define exSet(pLong,val) InterlockedExchange((volatile LONG *)pLong, val)    //=
+#define exMod(pLong,to,out) InterlockedCompareExchange((volatile LONG *)pLong, to, out)
+
+//thread used external callback function
+void RenderBuffer(DWORD bufferIndex);
+void DisplayBuffer(DWORD bufferIndex);
 
 #define WIN32_LEAN_AND_MEAN
-int mainLive=1;
-HWND hwndMain=NULL;
-void checkDirty(HWND hwnd);
+int mainThreadLive=1;
+DWORD displayBusy=0;
+DWORD displayedCount=0;
 
-DWORD WINAPI ThreadFunc(LPVOID n)
-{
-    int nrLoop=0;
-    while(mainLive>0) {
-        Sleep(10*(DWORD)n);//in ms
-        if((DWORD)n==1 && hwndMain!=NULL)
-            checkDirty(hwndMain);
-        //else
-        //    printf("thread[%d] loop %d waiting for next loop\n", (DWORD)n, nrLoop++);
+DWORD readerBusy=0;
+DWORD readerBusyOn=0;
+DWORD readeredCount=0;
+DWORD WINAPI ThreadFuncRender(LPVOID n) {
+    while(mainThreadLive != 0) {
+        //TODO: check if need render
+        exSet(&readerBusy,1);
+        //render something
+        RenderBuffer(readerBusyOn);
+        readeredCount++;
+
+        //after render, try to switch render buffer
+        if(displayBusy==0)
+            exSet(&readerBusyOn,1-readerBusyOn);
+
+        exSet(&readerBusy,0);
+        Sleep(10);//in ms
     }
-    //Sleep((DWORD)n*1000*2);
-    //return (DWORD)n * 10;
     return 0;
 }
-class ThreadObject {
-    HANDLE hThread;
-    public: DWORD exitCode;
-    DWORD threadId;
-    DWORD initSeed;
-    public: int isThreadDone() {
-        GetExitCodeThread(hThread, &exitCode);
-        if ( exitCode == STILL_ACTIVE ) {
-            printf("Thread %d is still running!\n", initSeed);
-            return 0;
-        }
-        return 1;
-    }
-    public: void startThread(DWORD seed) {
-        initSeed=seed;
-        hThread = CreateThread(NULL, 0, ThreadFunc, (LPVOID)initSeed, 0, &threadId );
-        if (hThread)
-            printf("Thread %d launched\n", initSeed);
-    }
-    public: void stopThread() {
-        CloseHandle(hThread);
-        printf("Thread %d returned %d\n", initSeed, exitCode);
-    }
-};
+DWORD WINAPI ThreadFuncDisplay(LPVOID n) {
+    DWORD displayBusyOn=1;
+    DWORD displayedOn=-1;
 
-HANDLE hThrd1;
-HANDLE hThrd2;
-DWORD exitCode1 = 0;
-DWORD exitCode2 = 0;
-DWORD threadId1, threadId2;
-ThreadObject thredObj;
+    char *displayBufferName[]={"[    -- ]","[ --    ]"};
+    while(mainThreadLive != 0) {
+        //TODO: check if need render
+        exSet(&displayBusy,1);
+        if(readerBusy==0 && readerBusyOn!=displayBusyOn)
+            exSet(&readerBusyOn,1-readerBusyOn);
+
+        displayBusyOn=1-readerBusyOn;
+        //display it
+        if(displayedOn != displayBusyOn) {
+            printf("Display buffer %s #%lu/%lu\n",displayBufferName[displayBusyOn],
+                ++displayedCount, readeredCount);
+            DisplayBuffer(displayBusyOn);
+            displayedOn = displayBusyOn;
+        }
+        exSet(&displayBusy,0);
+        Sleep(16);//in ms
+    }
+    return 0;
+}
+DWORD WINAPI ThreadFuncService(LPVOID n) {
+    while(mainThreadLive != 0) {
+        //TODO: check if need render
+        Sleep(20);//in ms
+    }
+    return 0;
+}
+#define THREADS_NUMBER 3
+HANDLE threadHandle1, threadHandle2, threadHandle3;
+DWORD exitCode1, exitCode2, exitCode3;
+DWORD threadId1, threadId2, threadId3;
 void startThreads(void) {
-    hThrd1 = CreateThread(NULL, 0, ThreadFunc, (LPVOID)1, 0, &threadId1 );
-    if (hThrd1)
+    threadHandle1 = CreateThread(NULL, 0, ThreadFuncRender, (LPVOID)10, 0, &threadId1 );
+    if (threadHandle1)
         printf("Thread 1 launched\n");
 
-    hThrd2 = CreateThread(NULL, 0, ThreadFunc, (LPVOID)200, 0, &threadId2 );
-    if(hThrd2)
+    threadHandle2 = CreateThread(NULL, 0, ThreadFuncDisplay, (LPVOID)16, 0, &threadId2 );
+    if(threadHandle2)
         printf("Thread 2 launched\n");
 
-    thredObj.startThread(100);
+    threadHandle3 = CreateThread(NULL, 0, ThreadFuncService, (LPVOID)20, 0, &threadId3 );
+    if(threadHandle3)
+        printf("Thread 3 launched\n");
+}
+void closeThreads(void) {
+    CloseHandle(threadHandle1);
+    CloseHandle(threadHandle2);
+    CloseHandle(threadHandle3);
+    printf("Thread 1 returned %d\n", exitCode1);
+    printf("Thread 2 returned %d\n", exitCode2);
+    printf("Thread 3 returned %d\n", exitCode3);
 }
 int isThreadAllDone(void) {
-        GetExitCodeThread(hThrd1, &exitCode1);
-        GetExitCodeThread(hThrd2, &exitCode2);
+        GetExitCodeThread(threadHandle1, &exitCode1);
+        GetExitCodeThread(threadHandle2, &exitCode2);
+        GetExitCodeThread(threadHandle3, &exitCode3);
         if ( exitCode1 == STILL_ACTIVE )
             puts("Thread 1 is still running!");
         if ( exitCode2 == STILL_ACTIVE )
             puts("Thread 2 is still running!");
-        if ( exitCode1 != STILL_ACTIVE && exitCode2 != STILL_ACTIVE &&thredObj.isThreadDone())
+        if ( exitCode3 == STILL_ACTIVE )
+            puts("Thread 3 is still running!");
+
+        if (   exitCode1 != STILL_ACTIVE
+            && exitCode2 != STILL_ACTIVE
+            && exitCode3 != STILL_ACTIVE)
             return 1;
         return 0;
 }
-void closeThreads(void) {
-    CloseHandle(hThrd1);
-    CloseHandle(hThrd2);
-    printf("Thread 1 returned %d\n", exitCode1);
-    printf("Thread 2 returned %d\n", exitCode2);
-    thredObj.stopThread();
-}
-int waitThreadAlldone(void)
-{
-    mainLive=0;
+int waitThreadAlldone(void) {
+    mainThreadLive=0;
     //startThreads();
     // Keep waiting until both calls to GetExitCodeThread succeed AND
     // neither of them returns STILL_ACTIVE.
@@ -108,6 +147,11 @@ int waitThreadAlldone(void)
 
 /*  Declare Windows procedure  */
 LRESULT CALLBACK WindowProcedure (HWND, UINT, WPARAM, LPARAM);
+void createGlobalResource();
+void destroyGlobalResource();
+void createWindowResource(HWND hwnd);
+void destroyWindowResource(HWND hwnd);
+static HWND mainCreatedHWND=NULL;
 
 /*  Make the class name into a global variable  */
 TCHAR szClassName[ ] = _T("CodeBlocksWindowsApp");
@@ -142,6 +186,7 @@ int WINAPI WinMain (HINSTANCE hThisInstance,
     if (!RegisterClassEx (&wincl))
         return 0;
 
+
     /* The class is registered, let's create the program*/
     hwnd = CreateWindowEx (
            0,                   /* Extended possibilites for variation */
@@ -158,6 +203,13 @@ int WINAPI WinMain (HINSTANCE hThisInstance,
            NULL                 /* No Window Creation data */
            );
 
+    if(hwnd == NULL) {
+        printf("Fatal error, CreateWindowEx fail, exit\n");
+        return -1;
+    }
+    mainCreatedHWND = hwnd;
+    createGlobalResource();
+    createWindowResource(hwnd);
     /* Make the window visible on the screen */
     ShowWindow (hwnd, nCmdShow);
     startThreads();
@@ -177,28 +229,131 @@ int WINAPI WinMain (HINSTANCE hThisInstance,
     fflush(stdout);
     //getchar();
 
+    destroyWindowResource(hwnd);
+    destroyGlobalResource();
     /* The program return-value is 0 - The value that PostQuitMessage() gave */
     return messages.wParam;
 }
 #define TWOPI	(2*3.14159)
 #define TWO_PI TWOPI
-int		cxClient, cyClient;//screen size
+int		clientWidth, clientHeight;//screen size
+RECT	clientRect;
+
 static POINT ptBegin;//mouse left down
 static POINT ptEnd;//mouse left up
 static POINT ptMove;//mouse move
 static int guiDirty=0;//need render
 static int msgCount=0;//debug counter
 static HRGN	hRgnClip;
+static HWND hwndMain=NULL;
 
+HBRUSH hBrushBG, hBrushFG;
+HDC renderDC[2]; //2 buffer for ping pang render/display
+HBITMAP renderBmp[2];
+
+void createGlobalResource() {
+    hBrushBG = CreateSolidBrush(RGB(0,128,0));
+    hBrushFG = CreateSolidBrush(RGB(rand() % 256, rand() % 256, rand() % 256));
+}
+void destroyGlobalResource() {
+	DeleteObject(hBrushBG);
+	DeleteObject(hBrushFG);
+    hBrushBG = NULL;
+    hBrushFG = NULL;
+}
+void createWindowResource(HWND hwnd) {
+    HDC hdc = GetDC(hwnd);
+    int i;
+    for(i=0;i<2;i++) {
+        // 1.创建兼容缓冲区
+        renderDC[i] = CreateCompatibleDC(hdc);   // 创建兼容DC
+        renderBmp[i] = CreateCompatibleBitmap(hdc, 2560*2, 1080*2);   // 创建兼容位图画布
+        if(renderBmp[i]==NULL)
+            printf("Fatal error, out of memory when CreateCompatibleBitmap(hdc, 2560*2, 1080*2);");
+        SelectObject(renderDC[i], renderBmp[i]);    // 选入
+    }
+
+    ReleaseDC(hwnd, hdc);
+}
+void destroyWindowResource(HWND hwnd) {
+    int i;
+    for(i=0;i<2;i++) {
+        // 4.释放缓冲区DC
+        DeleteDC(renderDC[i]);
+    }
+}
+void drawOnBGDC(HWND hWindow, HDC hdc, int index)
+{
+    int memoryWidth=clientRect.right - clientRect.left;
+    int memoryHeight=clientRect.bottom - clientRect.top;
+    HDC memoryDC=renderDC[index];
+
+    // 2.在缓冲区绘制
+	RECT		rect;
+	//draw whole background first
+	SetRect(&rect, 0, 0, memoryWidth, memoryHeight);
+ 	//FillRect(memoryDC, &rect, hBrushBG);
+ 	//BitBlt(memoryDC, 0, 0, memoryWidth, memoryHeight, memoryDC, 0, 0, SRCERASE);
+
+ 	HBRUSH hBrushRandom = CreateSolidBrush(RGB(rand() % 256, rand() % 256, rand() % 256));
+ 	int left=0, top=0, right=memoryWidth, bottom=memoryHeight;
+ 	if(memoryWidth>100) {
+ 	    left =rand() % (memoryWidth-100);
+ 	    right=left+100;
+ 	}
+    if(memoryHeight>100) {
+        top =rand() % (memoryHeight-100);
+        bottom=top+100;
+    }
+	SetRect(&rect, left, top, right, bottom);
+ 	FillRect(memoryDC, &rect, hBrushRandom);
+ 	DeleteObject(hBrushRandom);
+
+    //Rectangle(memoryDC, 100, 100, 200, 200);
+	SetRect(&rect,100, 100, 200, 200);
+ 	FillRect(memoryDC, &rect, hBrushFG);
+
+    //Rectangle(memoryDC, 300, 300, 200, 200);
+	SetRect(&rect,300, 300, 200, 200);
+ 	FillRect(memoryDC, &rect, hBrushFG);
+
+	//在兼容DC中间位置输出字符串, 相当于把hbmp这个位图加上了文字标注,
+    //DrawText(memoryDC,"Center Line Text", -1, &rect, DT_VCENTER|DT_SINGLELINE|DT_CENTER);
+    SetRect(&rect, 0, 0, memoryWidth, memoryHeight);
+    DrawText(memoryDC,"  Center Line Text  ", -1, &rect, DT_TOP|DT_SINGLELINE|DT_CENTER);
+}
+void drawFromBGDC(HWND hWindow, HDC hdc, int index)
+{
+    int memoryWidth=clientRect.right - clientRect.left;
+    int memoryHeight=clientRect.bottom - clientRect.top;
+    HDC memoryDC=renderDC[index];
+    // 3.一次性复制到设备DC
+    BitBlt(hdc, 0, 0, memoryWidth, memoryHeight, memoryDC, 0, 0, SRCCOPY);
+}
+
+void RenderBuffer(DWORD bufferIndex) {
+    HDC         hdc;
+    hdc = GetDC(hwndMain);
+    drawOnBGDC(hwndMain, hdc, bufferIndex);
+    ReleaseDC(hwndMain, hdc);
+}
+void DisplayBuffer(DWORD bufferIndex) {
+    HDC hdc = GetDC(hwndMain);
+    drawFromBGDC(hwndMain, hdc, bufferIndex);
+    ReleaseDC(hwndMain, hdc);
+}
+
+//----------------------------------------------------------------------
+#if 0
 void drawRaginTest(HDC hdc) {
     //由四个椭圆形成一个区域，然后把这个区域选入设备环境，
     //接着从窗口的客户区中心发散绘制一系列直线。这些直线仅出现裁剪区内。
         double fAngle, fRadius;
-		SetViewportOrgEx(hdc, cxClient/2, cyClient/2, NULL);
+		SetViewportOrgEx(hdc, clientWidth/2, clientHeight/2, NULL);
 		SelectClipRgn(hdc, hRgnClip);
 
 		// hypot 计算直角三角形斜边的长
-		fRadius = _hypot(cxClient/2.0, cyClient/2.0);
+		fRadius = _hypot(clientWidth/2.0, clientHeight/2.0);
 
 		for (fAngle = 0.0; fAngle < TWO_PI; fAngle += TWO_PI/360)
 		{
@@ -219,10 +374,10 @@ void createTestRagin() {
 
         HRGN			hRgnTemp[6];
 
-		hRgnTemp[0] = CreateEllipticRgn(0,			cyClient/3,		cxClient/2,		2*cyClient/3);
-		hRgnTemp[1] = CreateEllipticRgn(cxClient/2,	cyClient/3,		cxClient,		2*cyClient/3);
-		hRgnTemp[2] = CreateEllipticRgn(cxClient/3,	0,				2*cxClient/3,	cyClient/2);
-		hRgnTemp[3] = CreateEllipticRgn(cxClient/3, cyClient/2,		2*cxClient/3,	cyClient);
+		hRgnTemp[0] = CreateEllipticRgn(0,			clientHeight/3,		clientWidth/2,		2*clientHeight/3);
+		hRgnTemp[1] = CreateEllipticRgn(clientWidth/2,	clientHeight/3,		clientWidth,		2*clientHeight/3);
+		hRgnTemp[2] = CreateEllipticRgn(clientWidth/3,	0,				2*clientWidth/3,	clientHeight/2);
+		hRgnTemp[3] = CreateEllipticRgn(clientWidth/3, clientHeight/2,		2*clientWidth/3,	clientHeight);
 		hRgnTemp[4] = CreateRectRgn(0, 0, 1, 1);
 		hRgnTemp[5] = CreateRectRgn(0, 0, 1, 1);
 		hRgnClip = CreateRectRgn(0, 0, 1, 1);
@@ -239,13 +394,13 @@ void createTestRagin() {
 		ShowCursor(FALSE);
 }
 void drawMiscShape(HDC hdc) {
-		Rectangle(hdc, cxClient/8, cyClient/8, 7*cxClient/8, 7*cyClient/8);
+		Rectangle(hdc, clientWidth/8, clientHeight/8, 7*clientWidth/8, 7*clientHeight/8);
 		MoveToEx(hdc, 0, 0, NULL);
-		LineTo(hdc, cxClient, cyClient);
-		MoveToEx(hdc, 0, cyClient, NULL);
-		LineTo(hdc, cxClient, 0);
-		Ellipse(hdc, cxClient/8, cyClient/8, 7*cxClient/8, 7*cyClient/8);
-		RoundRect(hdc, cxClient/4, cyClient/4, 3*cxClient/4, 3*cyClient/4, cxClient/4, cyClient/4);
+		LineTo(hdc, clientWidth, clientHeight);
+		MoveToEx(hdc, 0, clientHeight, NULL);
+		LineTo(hdc, clientWidth, 0);
+		Ellipse(hdc, clientWidth/8, clientHeight/8, 7*clientWidth/8, 7*clientHeight/8);
+		RoundRect(hdc, clientWidth/4, clientHeight/4, 3*clientWidth/4, 3*clientHeight/4, clientWidth/4, clientHeight/4);
 }
 
 void drawSineWave(HDC hdc) {
@@ -255,8 +410,8 @@ void drawSineWave(HDC hdc) {
 
 		for (i = 0; i < NUM; i++)
 		{
-			apt[i].x = i*cxClient/NUM;
-			apt[i].y = (int)(cyClient / 2 * (1-sin(TWOPI * i / NUM)));
+			apt[i].x = i*clientWidth/NUM;
+			apt[i].y = (int)(clientHeight / 2 * (1-sin(TWOPI * i / NUM)));
 		}
 		Polyline(hdc, apt, NUM);
 }
@@ -264,10 +419,10 @@ void FillWindowToColor(HDC hdc, int color) {
 	HBRUSH		hBrush;
 	RECT		rect;
 
-	if (cxClient == 0 || cyClient == 0)
+	if (clientWidth == 0 || clientHeight == 0)
 		return;
 
-	SetRect(&rect, 0, 0, cxClient, cyClient);
+	SetRect(&rect, 0, 0, clientWidth, clientHeight);
  	hBrush = CreateSolidBrush(RGB(color&0xFF, (color>>8)&0xFF,(color>>16)&0xFF));
  	FillRect(hdc, &rect, hBrush);
 	DeleteObject(hBrush);
@@ -277,16 +432,60 @@ void RandomFillRect(HDC hdc)
 	HBRUSH		hBrush;
 	RECT		rect;
 
-	if (cxClient == 0 || cyClient == 0)
+	if (clientWidth == 0 || clientHeight == 0)
 		return;
 
-	SetRect(&rect, rand() % cxClient, rand() % cyClient, rand() % cxClient, rand() % cyClient);
+	SetRect(&rect, rand() % clientWidth, rand() % clientHeight, rand() % clientWidth, rand() % clientHeight);
  	hBrush = CreateSolidBrush(RGB(rand() % 256, rand() % 256, rand() % 256));
  	FillRect(hdc, &rect, hBrush);
 	DeleteObject(hBrush);
 }
 
 
+void checkDirty(HWND hwnd)
+{
+    enum DrawType_e
+    {
+        TYPE_LINE,
+        TYPE_RECT,
+        TYPE_ELLIPSE
+    };
+    if(guiDirty>0) {
+        guiDirty=0;
+        //force update GUI.
+        HDC         hdc;
+        //在处理非WM_PAINT消息时由Windows程序获取：
+        hdc = GetDC(hwnd);
+        //获得用于整个窗口的，而不仅仅是窗口客户区的设备环境句柄：
+        //hdc = GetWindowDC(hwnd);
+        //获取当前整个屏幕的设备环境句柄：
+        //hdc = CreateDC(TEXT("DISPLAY"), NULL, NULL, NULL);
+        FillWindowToColor(hdc, 0xFF);
+
+        //RandomFillRect(hdc);
+        //drawRaginTest(hdc);
+        /*
+        int nTypy = TYPE_LINE;
+        switch (nTypy)
+        {
+        case TYPE_LINE:
+            MoveToEx(hdc, ptBegin.x, ptBegin.y, NULL);
+            LineTo(hdc, ptEnd.x, ptEnd.y);
+            break;
+        case TYPE_RECT:
+            Rectangle(hdc, ptBegin.x, ptBegin.y, ptEnd.x, ptEnd.y);
+            break;
+        case TYPE_ELLIPSE:
+            Ellipse(hdc, ptBegin.x, ptBegin.y, ptEnd.x, ptEnd.y);
+            break;
+        default:
+            break;
+        }
+        */
+        ReleaseDC(hwnd, hdc);
+    }
+}
+#endif // 0
 void onDraw(HWND hwnd)
 {
     static int debugCount=0,onDrawCount=0;
@@ -313,47 +512,6 @@ void onDraw(HWND hwnd)
     */
     EndPaint(hwnd, &ps);                                 // 6
 }
-enum DrawType_e
-    {
-        TYPE_LINE,
-        TYPE_RECT,
-        TYPE_ELLIPSE
-    };
-void checkDirty(HWND hwnd)
-{
-    if(guiDirty>0) {
-        guiDirty=0;
-        //force update GUI.
-        HDC         hdc;
-        //在处理非WM_PAINT消息时由Windows程序获取：
-        hdc = GetDC(hwnd);
-        //获得用于整个窗口的，而不仅仅是窗口客户区的设备环境句柄：
-        //hdc = GetWindowDC(hwnd);
-        //获取当前整个屏幕的设备环境句柄：
-        //hdc = CreateDC(TEXT("DISPLAY"), NULL, NULL, NULL);
-        FillWindowToColor(hdc, 0xFF);
-
-        RandomFillRect(hdc);
-        drawRaginTest(hdc);
-        int nTypy = TYPE_LINE;
-        switch (nTypy)
-        {
-        case TYPE_LINE:
-            MoveToEx(hdc, ptBegin.x, ptBegin.y, NULL);
-            LineTo(hdc, ptEnd.x, ptEnd.y);
-            break;
-        case TYPE_RECT:
-            Rectangle(hdc, ptBegin.x, ptBegin.y, ptEnd.x, ptEnd.y);
-            break;
-        case TYPE_ELLIPSE:
-            Ellipse(hdc, ptBegin.x, ptBegin.y, ptEnd.x, ptEnd.y);
-            break;
-        default:
-            break;
-        }
-        ReleaseDC(hwnd, hdc);
-    }
-}
 
 /*  This function is called by the Windows function DispatchMessage()  */
 
@@ -361,14 +519,25 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 {
     guiDirty=0;
     msgCount++;
-    hwndMain = hwnd;
+    if(hwndMain == NULL) {
+        if(hwnd != mainCreatedHWND) {
+            printf("Fatal error: Window is not what has been created\n");
+            return DefWindowProc (hwnd, message, wParam, lParam);
+        }
+        hwndMain = hwnd;
+    }
+    else if(hwndMain != hwnd) {
+        printf("Fatal error: Window handle changed\n");
+        return -1;
+    }
     switch (message)                  /* handle the messages */
     {
 
         case WM_SIZE://窗口大小消息
-            cxClient = LOWORD(lParam);
-            cyClient = HIWORD(lParam);
-            createTestRagin();
+            clientWidth = LOWORD(lParam);
+            clientHeight = HIWORD(lParam);
+            SetRect(&clientRect, 0, 0, clientWidth, clientHeight);
+            //createTestRagin();
             return 0;
         case WM_CLOSE:
             DestroyWindow(hwnd);
@@ -376,9 +545,8 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
         case WM_DESTROY:
             PostQuitMessage (0);       /* send a WM_QUIT to the message queue */
             break;
-        case WM_PAINT:
-            //guiDirty++;
-            //checkDirty(hwnd);
+        case WM_PAINT: //Use BeginPaint() EndPaint() to reset invalid area
+            guiDirty++;
             onDraw(hwnd);
             printf("Here is a WM_PAINT 0x%03X ordered %d\n",message, msgCount++);
             break;
@@ -410,7 +578,6 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
             printf("Ignore MSG 0x%03X 0x%X 0x%X\n",message, wParam, lParam);
             return DefWindowProc (hwnd, message, wParam, lParam);
     }
-    //checkDirty(hwnd);
 
     return 0;
 }
