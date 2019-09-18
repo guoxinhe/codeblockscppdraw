@@ -397,7 +397,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
         case WM_MOUSEMOVE:
             ptMove.x = LOWORD(lParam);
             ptMove.y = HIWORD(lParam);
-            printf("Here is a Mouse move message 0x%03X %d %d\n",message, ptMove.x, ptMove.y);
+            //printf("Here is a Mouse move message 0x%03X %d %d\n",message, ptMove.x, ptMove.y);
             break;
 
         case WM_NCHITTEST: //0x84,132
@@ -407,7 +407,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
             //return DefWindowProc (hwnd, message, wParam, lParam);
             //break;
         default:                      /* for messages that we don't deal with */
-            printf("Here is a message 0x%03X ignored\n",message);
+            printf("Ignore MSG 0x%03X 0x%X 0x%X\n",message, wParam, lParam);
             return DefWindowProc (hwnd, message, wParam, lParam);
     }
     //checkDirty(hwnd);
