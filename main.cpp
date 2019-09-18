@@ -6,10 +6,6 @@
  * Thread 4: Service
  */
 
-
-
-
-
 #if defined(UNICODE) && !defined(_UNICODE)
     #define _UNICODE
 #elif defined(_UNICODE) && !defined(UNICODE)
@@ -28,7 +24,7 @@
 #define exMod(pLong,to,out) InterlockedCompareExchange((volatile LONG *)pLong, to, out)
 
 //thread used external callback function
-void RenderBuffer(DWORD bufferIndex);
+int RenderBuffer(DWORD bufferIndex);
 void DisplayBuffer(DWORD bufferIndex);
 
 #define WIN32_LEAN_AND_MEAN
@@ -39,20 +35,31 @@ DWORD displayedCount=0;
 DWORD readerBusy=0;
 DWORD readerBusyOn=0;
 DWORD readeredCount=0;
+DWORD renderIdentifier=0;
+const char *displayBufferName[]={"[    -- ]","[ --    ]"};
+
 DWORD WINAPI ThreadFuncRender(LPVOID n) {
+    int meetDisplayBusy=0;
     while(mainThreadLive != 0) {
         //TODO: check if need render
         exSet(&readerBusy,1);
-        //render something
-        RenderBuffer(readerBusyOn);
-        readeredCount++;
 
-        //after render, try to switch render buffer
-        if(displayBusy==0)
+        //check last display busy flag if need switch render buffer
+        if(meetDisplayBusy && displayBusy==0) {
             exSet(&readerBusyOn,1-readerBusyOn);
+            meetDisplayBusy=0;
+        }
 
+        //render something if user is dirty
+        if(RenderBuffer(readerBusyOn)!=0) {
+            //after render, try to switch render buffer
+            if(displayBusy==0)
+                exSet(&readerBusyOn,1-readerBusyOn);
+            else
+                meetDisplayBusy=1;
+        }
         exSet(&readerBusy,0);
-        Sleep(10);//in ms
+        Sleep(15);//in ms
     }
     return 0;
 }
@@ -60,20 +67,18 @@ DWORD WINAPI ThreadFuncDisplay(LPVOID n) {
     DWORD displayBusyOn=1;
     DWORD displayedOn=-1;
 
-    char *displayBufferName[]={"[    -- ]","[ --    ]"};
     while(mainThreadLive != 0) {
         //TODO: check if need render
         exSet(&displayBusy,1);
-        if(readerBusy==0 && readerBusyOn!=displayBusyOn)
-            exSet(&readerBusyOn,1-readerBusyOn);
-
         displayBusyOn=1-readerBusyOn;
         //display it
         if(displayedOn != displayBusyOn) {
-            printf("Display buffer %s #%lu/%lu\n",displayBufferName[displayBusyOn],
-                ++displayedCount, readeredCount);
+            ++displayedCount;
             DisplayBuffer(displayBusyOn);
             displayedOn = displayBusyOn;
+            printf("Display buffer %s #%lu/%lu\n",
+                displayBufferName[displayBusyOn],
+                displayedCount, readeredCount);
         }
         exSet(&displayBusy,0);
         Sleep(16);//in ms
@@ -87,7 +92,7 @@ DWORD WINAPI ThreadFuncService(LPVOID n) {
     }
     return 0;
 }
-#define THREADS_NUMBER 3
+
 HANDLE threadHandle1, threadHandle2, threadHandle3;
 DWORD exitCode1, exitCode2, exitCode3;
 DWORD threadId1, threadId2, threadId3;
@@ -144,18 +149,16 @@ int waitThreadAlldone(void) {
     return EXIT_SUCCESS;
 }
 
-
-/*  Declare Windows procedure  */
-LRESULT CALLBACK WindowProcedure (HWND, UINT, WPARAM, LPARAM);
 void createGlobalResource();
 void destroyGlobalResource();
 void createWindowResource(HWND hwnd);
 void destroyWindowResource(HWND hwnd);
 static HWND mainCreatedHWND=NULL;
 
+/*  Declare Windows procedure  */
 /*  Make the class name into a global variable  */
 TCHAR szClassName[ ] = _T("CodeBlocksWindowsApp");
-
+LRESULT CALLBACK WindowProcedure (HWND, UINT, WPARAM, LPARAM);
 int WINAPI WinMain (HINSTANCE hThisInstance,
                      HINSTANCE hPrevInstance,
                      LPSTR lpszArgument,
@@ -225,15 +228,16 @@ int WINAPI WinMain (HINSTANCE hThisInstance,
         //printf("Main thread loop %d waiting for next message\n", nrLoop++);
     }
     waitThreadAlldone();
-    printf("Press enter to continue\n");
-    fflush(stdout);
-    //getchar();
 
     destroyWindowResource(hwnd);
     destroyGlobalResource();
     /* The program return-value is 0 - The value that PostQuitMessage() gave */
+    printf("Press enter to continue\n");
+    fflush(stdout);
+    //getchar();
     return messages.wParam;
 }
+
 #define TWOPI	(2*3.14159)
 #define TWO_PI TWOPI
 int		clientWidth, clientHeight;//screen size
@@ -284,25 +288,24 @@ void destroyWindowResource(HWND hwnd) {
 }
 void drawOnBGDC(HWND hWindow, HDC hdc, int index)
 {
-    int memoryWidth=clientRect.right - clientRect.left;
-    int memoryHeight=clientRect.bottom - clientRect.top;
     HDC memoryDC=renderDC[index];
 
     // 2.在缓冲区绘制
 	RECT		rect;
 	//draw whole background first
-	SetRect(&rect, 0, 0, memoryWidth, memoryHeight);
+	SetRect(&rect, 0, 0, clientWidth, clientHeight);
  	//FillRect(memoryDC, &rect, hBrushBG);
- 	//BitBlt(memoryDC, 0, 0, memoryWidth, memoryHeight, memoryDC, 0, 0, SRCERASE);
+ 	//BitBlt(memoryDC, 0, 0, clientWidth, clientHeight, memoryDC, 0, 0, SRCERASE);
 
  	HBRUSH hBrushRandom = CreateSolidBrush(RGB(rand() % 256, rand() % 256, rand() % 256));
- 	int left=0, top=0, right=memoryWidth, bottom=memoryHeight;
- 	if(memoryWidth>100) {
- 	    left =rand() % (memoryWidth-100);
+ 	int left=0, top=0, right=clientWidth, bottom=clientHeight;
+ 	//random on client area
+ 	if(clientWidth>100) {
+ 	    left =rand() % (clientWidth-100);
  	    right=left+100;
  	}
-    if(memoryHeight>100) {
-        top =rand() % (memoryHeight-100);
+    if(clientHeight>100) {
+        top =rand() % (clientHeight-100);
         bottom=top+100;
     }
 	SetRect(&rect, left, top, right, bottom);
@@ -319,30 +322,44 @@ void drawOnBGDC(HWND hWindow, HDC hdc, int index)
 
 	//在兼容DC中间位置输出字符串, 相当于把hbmp这个位图加上了文字标注,
     //DrawText(memoryDC,"Center Line Text", -1, &rect, DT_VCENTER|DT_SINGLELINE|DT_CENTER);
-    SetRect(&rect, 0, 0, memoryWidth, memoryHeight);
-    DrawText(memoryDC,"  Center Line Text  ", -1, &rect, DT_TOP|DT_SINGLELINE|DT_CENTER);
+    SetRect(&rect, 0, 0, clientWidth, clientHeight);
+    char title[256];
+    sprintf(title, "  Center Line Text rendering %s on message %x #%lu/%lu  ",
+        displayBufferName[index], renderIdentifier,
+        displayedCount, readeredCount);
+    DrawText(memoryDC, title, -1, &rect, DT_TOP|DT_SINGLELINE|DT_CENTER);
 }
 void drawFromBGDC(HWND hWindow, HDC hdc, int index)
 {
-    int memoryWidth=clientRect.right - clientRect.left;
-    int memoryHeight=clientRect.bottom - clientRect.top;
     HDC memoryDC=renderDC[index];
     // 3.一次性复制到设备DC
-    BitBlt(hdc, 0, 0, memoryWidth, memoryHeight, memoryDC, 0, 0, SRCCOPY);
+    BitBlt(hdc, 0, 0, clientWidth, clientHeight, memoryDC, 0, 0, SRCCOPY);
 }
 
-void RenderBuffer(DWORD bufferIndex) {
-    HDC         hdc;
-    hdc = GetDC(hwndMain);
-    drawOnBGDC(hwndMain, hdc, bufferIndex);
-    ReleaseDC(hwndMain, hdc);
+int RenderBuffer(DWORD bufferIndex) {
+    if(guiDirty) {
+        HDC         hdc;
+        hdc = GetDC(hwndMain);
+        readeredCount++;
+        drawOnBGDC(hwndMain, hdc, bufferIndex);
+        ReleaseDC(hwndMain, hdc);
+        guiDirty=0;
+        return 1;
+    }
+    return 0;
 }
 void DisplayBuffer(DWORD bufferIndex) {
     HDC hdc = GetDC(hwndMain);
     drawFromBGDC(hwndMain, hdc, bufferIndex);
     ReleaseDC(hwndMain, hdc);
 }
-
+void DisplayBufferOnPaint(HWND hwnd) {
+    HDC         hdc;
+    PAINTSTRUCT ps;
+    hdc = BeginPaint(hwnd, &ps);
+    drawFromBGDC(hwndMain, hdc, 1-readerBusyOn);
+    EndPaint(hwnd, &ps);
+}
 //----------------------------------------------------------------------
 #if 0
 void drawRaginTest(HDC hdc) {
@@ -485,7 +502,6 @@ void checkDirty(HWND hwnd)
         ReleaseDC(hwnd, hdc);
     }
 }
-#endif // 0
 void onDraw(HWND hwnd)
 {
     static int debugCount=0,onDrawCount=0;
@@ -512,12 +528,12 @@ void onDraw(HWND hwnd)
     */
     EndPaint(hwnd, &ps);                                 // 6
 }
+#endif // 0
 
 /*  This function is called by the Windows function DispatchMessage()  */
 
 LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-    guiDirty=0;
     msgCount++;
     if(hwndMain == NULL) {
         if(hwnd != mainCreatedHWND) {
@@ -530,13 +546,14 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
         printf("Fatal error: Window handle changed\n");
         return -1;
     }
+    renderIdentifier = message;//for debug only
     switch (message)                  /* handle the messages */
     {
-
         case WM_SIZE://窗口大小消息
             clientWidth = LOWORD(lParam);
             clientHeight = HIWORD(lParam);
             SetRect(&clientRect, 0, 0, clientWidth, clientHeight);
+            guiDirty++;
             //createTestRagin();
             return 0;
         case WM_CLOSE:
@@ -546,8 +563,8 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
             PostQuitMessage (0);       /* send a WM_QUIT to the message queue */
             break;
         case WM_PAINT: //Use BeginPaint() EndPaint() to reset invalid area
-            guiDirty++;
-            onDraw(hwnd);
+            //guiDirty++;
+            DisplayBufferOnPaint(hwnd);
             printf("Here is a WM_PAINT 0x%03X ordered %d\n",message, msgCount++);
             break;
 
@@ -556,16 +573,19 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
             ptBegin.x = LOWORD(lParam);
             ptBegin.y = HIWORD(lParam);
             guiDirty++;
+            printf("Here is a Mouse LBDn message 0x%03X %d %d\n",message, ptBegin.x, ptBegin.y);
             break;
         case WM_LBUTTONUP:
             ptEnd.x = LOWORD(lParam);
             ptEnd.y = HIWORD(lParam);
             guiDirty++;
+            printf("Here is a Mouse LBUp message 0x%03X %d %d\n",message, ptEnd.x, ptEnd.y);
             break;
         case WM_MOUSEMOVE:
             ptMove.x = LOWORD(lParam);
             ptMove.y = HIWORD(lParam);
-            //printf("Here is a Mouse move message 0x%03X %d %d\n",message, ptMove.x, ptMove.y);
+            guiDirty++;
+            printf("Here is a Mouse move message 0x%03X %d %d\n",message, ptMove.x, ptMove.y);
             break;
 
         case WM_NCHITTEST: //0x84,132
@@ -575,7 +595,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
             //return DefWindowProc (hwnd, message, wParam, lParam);
             //break;
         default:                      /* for messages that we don't deal with */
-            printf("Ignore MSG 0x%03X 0x%X 0x%X\n",message, wParam, lParam);
+            //printf("Ignore MSG 0x%03X 0x%X 0x%X\n",message, wParam, lParam);
             return DefWindowProc (hwnd, message, wParam, lParam);
     }
 
