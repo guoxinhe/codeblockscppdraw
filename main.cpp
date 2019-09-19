@@ -16,6 +16,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <math.h>//for sin(float);
+#include "plugin.h"
 
 #define exInc(pLong) InterlockedIncrement((volatile LONG *)pLong)            //++
 #define exDec(pLong) InterlockedDecrement((volatile LONG *)pLong)            //--
@@ -42,7 +43,7 @@ DWORD readeredCount=0;
 DWORD renderIdentifier=0, renderIdwp, renderIdlp;
 const char *displayBufferName[]={"[    -- ]","[ --    ]"};
 
-DWORD WINAPI ThreadFuncRender(LPVOID n) {
+DWORD WINAPI ThreadFuncRender(LPVOID lpParam) {
     int meetDisplayBusy=0;
     while(mainThreadLive != 0) {
         //TODO: check if need render
@@ -63,37 +64,36 @@ DWORD WINAPI ThreadFuncRender(LPVOID n) {
                 meetDisplayBusy=1;
         }
         exSet(&readerBusy,0);
-        Sleep(15);//in ms
+        Sleep((DWORD)lpParam);//in ms
     }
     return 0;
 }
-DWORD WINAPI ThreadFuncDisplay(LPVOID n) {
+DWORD WINAPI ThreadFuncDisplay(LPVOID lpParam) {
     DWORD displayBusyOn=1;
     DWORD displayedOn=-1;
 
     while(mainThreadLive != 0) {
         //TODO: check if need render
-        exSet(&displayBusy,1);
         displayBusyOn=1-readerBusyOn;
-        //display it
         if(displayedOn != displayBusyOn) {
+            exSet(&displayBusy,1);
+            displayedOn = displayBusyOn;
             ++displayedCount;
             DisplayBuffer(displayBusyOn);
-            displayedOn = displayBusyOn;
             printf("Display buffer %s #%lu/%lu\n",
                 displayBufferName[displayBusyOn],
                 displayedCount, readeredCount);
-        }
-        exSet(&displayBusy,0);
-        Sleep(16);//in ms
+            exSet(&displayBusy,0);
+        } else
+            Sleep((DWORD)lpParam);//in ms
     }
     return 0;
 }
-DWORD WINAPI ThreadFuncService(LPVOID n) {
+DWORD WINAPI ThreadFuncService(LPVOID lpParam) {
     //TODO: add thread enter once code
     while(mainThreadLive != 0) {
         //TODO: check if need render
-        Sleep(20);//in ms
+        Sleep((DWORD)lpParam);//in ms
     }
     //TODO: add thread leave once code
     return 0;
@@ -107,7 +107,7 @@ void startThreads(void) {
     if (threadHandle1)
         printf("Thread 1 launched\n");
 
-    threadHandle2 = CreateThread(NULL, 0, ThreadFuncDisplay, (LPVOID)16, 0, &threadId2 );
+    threadHandle2 = CreateThread(NULL, 0, ThreadFuncDisplay, (LPVOID)2, 0, &threadId2 );
     if(threadHandle2)
         printf("Thread 2 launched\n");
 
@@ -297,10 +297,14 @@ void createWindowResource(HWND hwnd) {
         }
     }
 
+    plugina.open(0);
+    plugina.registerObj(0, hdc);
+    plugina.user(0,0,0);
     ReleaseDC(hwnd, hdc);
 }
 void destroyWindowResource(HWND hwnd) {
     int i;
+    plugina.close();
     for(i=0;i<2;i++) {
         // 4.释放缓冲区DC
         DeleteDC(renderBuffer[i].renderDC);
@@ -417,15 +421,25 @@ void drawDCGrid(HDC hdc, int rows, int cols, int fillRandomColor) {
                 row*clientHeight/rows +2,
                 (1+col)*clientWidth/cols -2,
                 (1+row)*clientHeight/rows -2);
-            HBRUSH hBrush = CreateSolidBrush(RGB(rand() % 256, rand() % 256, rand() % 256));
-            FillRect(hdc, &rect, hBrush);
-            DrawText(hdc, "A", -1, &rect, DT_VCENTER|DT_SINGLELINE|DT_CENTER);
-            DeleteObject(hBrush);
+            if((ptMove.x>=rect.left-2 && ptMove.x<rect.right+2 &&
+                ptMove.y>=rect.top-2 && ptMove.y<rect.bottom+2) ||
+                fillRandomColor==0xFF) {
+                HBRUSH hBrush;
+                if(fillRandomColor==0xFF)
+                    hBrush = CreateSolidBrush(RGB(rand() % 256, rand() % 256, rand() % 256));
+                else
+                    hBrush = CreateSolidBrush(RGB(255,255,255));
+                FillRect(hdc, &rect, hBrush);
+                DrawText(hdc, "A", -1, &rect, DT_VCENTER|DT_SINGLELINE|DT_CENTER);
+                DeleteObject(hBrush);
+            }
         }
     }
 }
 
 void drawOnBGDC(HWND hWindow, HDC hdc, int index) {
+
+    int fillRandomColor=1;
     HDC memoryDC=renderBuffer[index].renderDC;
     renderBuffer[index].renderCount++;
 
@@ -436,8 +450,9 @@ void drawOnBGDC(HWND hWindow, HDC hdc, int index) {
 	//select on of next to erase background, or left it blink
  	FillRect(memoryDC, &rect, hBrushBG);
  	//BitBlt(memoryDC, 0, 0, clientWidth, clientHeight, memoryDC, 0, 0, SRCERASE);
- 	drawDCGrid(memoryDC,13, 30, 0);
+ 	drawDCGrid(memoryDC,13, 30, fillRandomColor);
 
+ 	if(fillRandomColor==0) {
  	HBRUSH hBrushRandom = CreateSolidBrush(RGB(rand() % 256, rand() % 256, rand() % 256));
  	int left=0, top=0, right=clientWidth, bottom=clientHeight;
  	//random on client area
@@ -460,7 +475,10 @@ void drawOnBGDC(HWND hWindow, HDC hdc, int index) {
     //Rectangle(memoryDC, 300, 300, 200, 200);
 	SetRect(&rect,300, 300, 200, 200);
  	FillRect(memoryDC, &rect, hBrushFG);
+ 	}
 
+    plugina.render(hdc);
+    plugina.display(memoryDC, clientWidth, clientHeight);
 	//在兼容DC中间位置输出字符串, 相当于把hbmp这个位图加上了文字标注,
     //DrawText(memoryDC,"Center Line Text", -1, &rect, DT_VCENTER|DT_SINGLELINE|DT_CENTER);
     SetRect(&rect, 0, 0, clientWidth, clientHeight);
@@ -481,11 +499,11 @@ void drawFromBGDC(HWND hWindow, HDC hdc, int index) {
     renderBuffer[index].displayCount++;
     // 3.一次性复制到设备DC
     BitBlt(hdc, 0, 0, clientWidth, clientHeight, memoryDC, 0, 0, SRCCOPY);
-
     //BitBltRotate(hdc, memoryDC, renderBuffer[index].renderBmp, clientWidth, clientHeight, 30);
     //SelectObject(renderBuffer[index].renderDC, renderBuffer[index].renderBmp);
 }
 int RenderBuffer(DWORD bufferIndex) {
+    guiDirty = 1;
     if(guiDirty) {
         HDC         hdc;
         hdc = GetDC(hwndMain);
@@ -725,8 +743,8 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
         case WM_MBUTTONDOWN:
-            ptBegin.x = LOWORD(lParam);
-            ptBegin.y = HIWORD(lParam);
+            ptBegin.x = ptMove.x = LOWORD(lParam);
+            ptBegin.y = ptMove.y = HIWORD(lParam);
             guiDirty++;
             printf("Here is a Mouse LBDn message 0x%03X %d %d\n",message, ptBegin.x, ptBegin.y);
             break;
@@ -734,16 +752,16 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
         case WM_LBUTTONUP:
         case WM_RBUTTONUP:
         case WM_MBUTTONUP:
-            ptEnd.x = LOWORD(lParam);
-            ptEnd.y = HIWORD(lParam);
+            ptEnd.x = ptMove.x = LOWORD(lParam);
+            ptEnd.y = ptMove.y = HIWORD(lParam);
             guiDirty++;
             printf("Here is a Mouse LBUp message 0x%03X %d %d\n",message, ptEnd.x, ptEnd.y);
             break;
         case WM_LBUTTONDBLCLK:
         case WM_RBUTTONDBLCLK:
         case WM_MBUTTONDBLCLK:
-            ptEnd.x = LOWORD(lParam);
-            ptEnd.y = HIWORD(lParam);
+            ptEnd.x = ptMove.x = LOWORD(lParam);
+            ptEnd.y = ptMove.y = HIWORD(lParam);
             guiDirty++;
             printf("Here is a Mouse LBDc message 0x%03X %d %d\n",message, ptEnd.x, ptEnd.y);
             break;
