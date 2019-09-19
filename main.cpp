@@ -23,6 +23,10 @@
 #define exSet(pLong,val) InterlockedExchange((volatile LONG *)pLong, val)    //=
 #define exMod(pLong,to,out) InterlockedCompareExchange((volatile LONG *)pLong, to, out)
 
+#define PI      (3.14159)
+#define TWOPI   (2*3.14159)
+#define TWO_PI  TWOPI
+
 //thread used external callback function
 int RenderBuffer(DWORD bufferIndex);
 void DisplayBuffer(DWORD bufferIndex);
@@ -35,7 +39,7 @@ DWORD displayedCount=0;
 DWORD readerBusy=0;
 DWORD readerBusyOn=0;
 DWORD readeredCount=0;
-DWORD renderIdentifier=0;
+DWORD renderIdentifier=0, renderIdwp, renderIdlp;
 const char *displayBufferName[]={"[    -- ]","[ --    ]"};
 
 DWORD WINAPI ThreadFuncRender(LPVOID n) {
@@ -86,10 +90,12 @@ DWORD WINAPI ThreadFuncDisplay(LPVOID n) {
     return 0;
 }
 DWORD WINAPI ThreadFuncService(LPVOID n) {
+    //TODO: add thread enter once code
     while(mainThreadLive != 0) {
         //TODO: check if need render
         Sleep(20);//in ms
     }
+    //TODO: add thread leave once code
     return 0;
 }
 
@@ -149,6 +155,7 @@ int waitThreadAlldone(void) {
     return EXIT_SUCCESS;
 }
 
+//called by main
 void createGlobalResource();
 void destroyGlobalResource();
 void createWindowResource(HWND hwnd);
@@ -188,7 +195,6 @@ int WINAPI WinMain (HINSTANCE hThisInstance,
     /* Register the window class, and if it fails quit the program */
     if (!RegisterClassEx (&wincl))
         return 0;
-
 
     /* The class is registered, let's create the program*/
     hwnd = CreateWindowEx (
@@ -238,8 +244,6 @@ int WINAPI WinMain (HINSTANCE hThisInstance,
     return messages.wParam;
 }
 
-#define TWOPI	(2*3.14159)
-#define TWO_PI TWOPI
 int		clientWidth, clientHeight;//screen size
 RECT	clientRect;
 
@@ -248,12 +252,15 @@ static POINT ptEnd;//mouse left up
 static POINT ptMove;//mouse move
 static int guiDirty=0;//need render
 static int msgCount=0;//debug counter
-static HRGN	hRgnClip;
 static HWND hwndMain=NULL;
-
 HBRUSH hBrushBG, hBrushFG;
-HDC renderDC[2]; //2 buffer for ping pang render/display
-HBITMAP renderBmp[2];
+struct RenderBuffer {
+    HDC renderDC;
+    HBITMAP renderBmp;
+    //other attribute for this buffer
+    DWORD renderCount, displayCount;
+};
+struct RenderBuffer renderBuffer[2];//2 buffer for ping pang render/display
 
 void createGlobalResource() {
     hBrushBG = CreateSolidBrush(RGB(0,128,0));
@@ -268,13 +275,26 @@ void destroyGlobalResource() {
 void createWindowResource(HWND hwnd) {
     HDC hdc = GetDC(hwnd);
     int i;
+    DWORD renderWidth=2560*2, renderHeight=1080*2;
+    RECT rect;
+    SetRect(&rect, 0, 0, renderWidth, renderHeight);
     for(i=0;i<2;i++) {
+        renderBuffer[i].renderCount=0;
+        renderBuffer[i].displayCount=0;
         // 1.创建兼容缓冲区
-        renderDC[i] = CreateCompatibleDC(hdc);   // 创建兼容DC
-        renderBmp[i] = CreateCompatibleBitmap(hdc, 2560*2, 1080*2);   // 创建兼容位图画布
-        if(renderBmp[i]==NULL)
+        renderBuffer[i].renderDC = CreateCompatibleDC(hdc);   // 创建兼容DC
+        // 创建兼容位图画布
+        renderBuffer[i].renderBmp = CreateCompatibleBitmap(hdc, renderWidth, renderHeight);
+        if(renderBuffer[i].renderBmp==NULL) {
             printf("Fatal error, out of memory when CreateCompatibleBitmap(hdc, 2560*2, 1080*2);");
-        SelectObject(renderDC[i], renderBmp[i]);    // 选入
+        } else {
+            SelectObject(renderBuffer[i].renderDC, renderBuffer[i].renderBmp);    // 选入
+
+            //debug optional initialize to a back ground color
+            HBRUSH hBrushTmp=CreateSolidBrush(RGB(128*i,0, 128*(1-i)));
+            FillRect(renderBuffer[i].renderDC, &rect, hBrushTmp);
+            DeleteObject(hBrushTmp);
+        }
     }
 
     ReleaseDC(hwnd, hdc);
@@ -283,19 +303,140 @@ void destroyWindowResource(HWND hwnd) {
     int i;
     for(i=0;i<2;i++) {
         // 4.释放缓冲区DC
-        DeleteDC(renderDC[i]);
+        DeleteDC(renderBuffer[i].renderDC);
     }
 }
-void drawOnBGDC(HWND hWindow, HDC hdc, int index)
+
+//===============函数定义=====================
+//图像的旋转
+//围绕图片中心点逆时针旋转
+#define ijToxyx(i,j,w,h) (-0.5*(w) + (i))
+#define ijToxyy(i,j,w,h) ( 0.5*(h) - (j))
+#define xyToijx(x,y,w,h) ( 0.5*(w) + (x))
+#define xyToijy(x,y,w,h) ( 0.5*(h) - (y))
+POINT ijToxy(float i, float j,int w,int h) {
+	POINT c;
+	c.x = -0.5*w + i;
+	c.y = 0.5*h - j;
+	return c;
+}
+POINT xyToij(float x, float y,int w,int h) {
+	POINT c;
+	c.x = 0.5*w + x;
+	c.y = 0.5*h - y;
+	return c;
+}
+
+void BitBltRotate(HDC hdc, HDC hMemDC, HBITMAP hBitmap, int Width, int Heigh,int angle)
 {
-    HDC memoryDC=renderDC[index];
+	BITMAP bm;
+	GetObject(hBitmap, sizeof(bm), &bm);
+	int WidthRow = bm.bmWidthBytes;//原位图的字节宽(即原位图的每行字节数)
+
+	//获取原位图的像素位
+	BYTE *Pixel = new BYTE[WidthRow*Heigh];
+	GetBitmapBits(hBitmap, WidthRow*Heigh, (LPVOID)Pixel);
+
+	//绕中心旋转，新图片宽和高最大为:
+	int newWidth = Width + Heigh;
+	int newHeigh = newWidth;
+
+	BYTE *newPixel = new BYTE[newWidth*newHeigh * 4];//存放新的像素位
+	memset(newPixel, 255, newWidth*newHeigh * 4 * sizeof(BYTE));
+
+	//图像旋转
+	for (int j = 0; j <Heigh; j++) {//行
+		for (int i = 0; i < Width; i++) {//列
+			//(i,j)转化为坐标系坐标
+			float x0 = ijToxyx(i, j, Width, Heigh);//.x;
+			float y0 = ijToxyy(i, j, Width, Heigh);//.y;
+
+			float r = sqrt(x0*x0 + y0*y0);
+			/*
+				x0=r*cos(a),y0=r*sin(a)
+				旋转b角度
+				x1=r*cos(a+b)=r*(cos(a)cos(b)-sin(a)sin(b))
+					=r*(x0/r * cos(b)-y0/r *sin(b))
+				y1=r*sin(a+b)=r*(sin(a)cos(b)+cos(a)sin(b))
+					=r*(y0/r *cos(b)+x0/r * sin(b))
+
+			*/
+
+			//原坐标(x0,y0)->新坐标(x1,y1)
+			float x1 = r*(x0/r*cos(angle*PI/180)-y0/r*sin(angle*PI/180));
+			float y1 = r*(y0/r*cos(angle*PI/180)+x0/r*sin(angle*PI/180));
+
+			//坐标系坐标转化为(i,j)
+			float i1 = xyToijx(x1, y1, Width, Heigh);//.x;
+			float j1 = xyToijy(x1, y1, Width, Heigh);//.y;
+
+			float i2 = i1+ 0.5*Heigh;
+			float j2 = j1+0.5*Width;
+			//每4个为一个像素位
+			for (int k = 0; k < 4; k++)
+			{
+				newPixel[int(j2)*newWidth *4 + 4 *int(i2) + k] = Pixel[j*Width * 4 + 4 * i + k];
+			}
+		}
+	}
+
+	//创建一个新的位图
+	HBITMAP hNewBitmap = CreateCompatibleBitmap(hdc, newWidth, newHeigh);
+
+	SelectObject(hMemDC, hNewBitmap);//选进内存DC
+
+	SetBitmapBits(hNewBitmap, newWidth*newHeigh * 4, newPixel);
+	BitBlt(hdc, 0, 0, newWidth, newHeigh, hMemDC, 0, 0, SRCCOPY);
+
+	DeleteObject(hNewBitmap);
+
+	delete[] Pixel;
+	delete[] newPixel;
+}
+
+void drawDCGrid(HDC hdc, int rows, int cols, int fillRandomColor) {
+    int row, col;
+    int gridW=clientWidth/cols;
+    int gridH=clientHeight/rows;
+    for(row=1;row<rows;row++) {
+        MoveToEx(hdc, 0, row*clientHeight/rows, NULL);
+        LineTo(hdc, clientWidth, row*clientHeight/rows);
+    }
+    for(col=1;col<cols;col++) {
+        MoveToEx(hdc, col*clientWidth/cols, 0, NULL);
+        LineTo(hdc, col*clientWidth/cols, clientHeight);
+    }
+
+    if(fillRandomColor==0 || gridH<5 || gridW<5)
+        return;
+    RECT rect;
+    for(row=0;row<rows;row++) {
+        for(col=0;col<cols;col++) {
+            SetRect(&rect,
+                col*clientWidth/cols  +2,
+                row*clientHeight/rows +2,
+                (1+col)*clientWidth/cols -2,
+                (1+row)*clientHeight/rows -2);
+            HBRUSH hBrush = CreateSolidBrush(RGB(rand() % 256, rand() % 256, rand() % 256));
+            FillRect(hdc, &rect, hBrush);
+            DrawText(hdc, "A", -1, &rect, DT_VCENTER|DT_SINGLELINE|DT_CENTER);
+            DeleteObject(hBrush);
+        }
+    }
+}
+
+void drawOnBGDC(HWND hWindow, HDC hdc, int index) {
+    HDC memoryDC=renderBuffer[index].renderDC;
+    renderBuffer[index].renderCount++;
 
     // 2.在缓冲区绘制
 	RECT		rect;
 	//draw whole background first
 	SetRect(&rect, 0, 0, clientWidth, clientHeight);
- 	//FillRect(memoryDC, &rect, hBrushBG);
+	//select on of next to erase background, or left it blink
+ 	FillRect(memoryDC, &rect, hBrushBG);
  	//BitBlt(memoryDC, 0, 0, clientWidth, clientHeight, memoryDC, 0, 0, SRCERASE);
+ 	drawDCGrid(memoryDC,13, 30, 0);
 
  	HBRUSH hBrushRandom = CreateSolidBrush(RGB(rand() % 256, rand() % 256, rand() % 256));
  	int left=0, top=0, right=clientWidth, bottom=clientHeight;
@@ -328,14 +469,22 @@ void drawOnBGDC(HWND hWindow, HDC hdc, int index)
         displayBufferName[index], renderIdentifier,
         displayedCount, readeredCount);
     DrawText(memoryDC, title, -1, &rect, DT_TOP|DT_SINGLELINE|DT_CENTER);
+    rect.top += 24;
+    sprintf(title, "  RenderBuffer display/render %lu/%lu msg:%x %x %x %d %d  ",
+        renderBuffer[index].displayCount, renderBuffer[index].renderCount,
+        renderIdentifier, renderIdwp, renderIdlp,
+        LOWORD(renderIdlp), HIWORD(renderIdlp));
+    DrawText(memoryDC, title, -1, &rect, DT_TOP|DT_SINGLELINE|DT_CENTER);
 }
-void drawFromBGDC(HWND hWindow, HDC hdc, int index)
-{
-    HDC memoryDC=renderDC[index];
+void drawFromBGDC(HWND hWindow, HDC hdc, int index) {
+    HDC memoryDC=renderBuffer[index].renderDC;
+    renderBuffer[index].displayCount++;
     // 3.一次性复制到设备DC
     BitBlt(hdc, 0, 0, clientWidth, clientHeight, memoryDC, 0, 0, SRCCOPY);
-}
 
+    //BitBltRotate(hdc, memoryDC, renderBuffer[index].renderBmp, clientWidth, clientHeight, 30);
+    //SelectObject(renderBuffer[index].renderDC, renderBuffer[index].renderBmp);
+}
 int RenderBuffer(DWORD bufferIndex) {
     if(guiDirty) {
         HDC         hdc;
@@ -362,6 +511,7 @@ void DisplayBufferOnPaint(HWND hwnd) {
 }
 //----------------------------------------------------------------------
 #if 0
+static HRGN	hRgnClip;
 void drawRaginTest(HDC hdc) {
     //由四个椭圆形成一个区域，然后把这个区域选入设备环境，
     //接着从窗口的客户区中心发散绘制一系列直线。这些直线仅出现裁剪区内。
@@ -547,6 +697,8 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
         return -1;
     }
     renderIdentifier = message;//for debug only
+    renderIdwp = wParam;
+    renderIdlp = lParam;
     switch (message)                  /* handle the messages */
     {
         case WM_SIZE://窗口大小消息
@@ -569,18 +721,36 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
             break;
 
         //mouse event
+        case WM_KEYDOWN:
         case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN:
+        case WM_MBUTTONDOWN:
             ptBegin.x = LOWORD(lParam);
             ptBegin.y = HIWORD(lParam);
             guiDirty++;
             printf("Here is a Mouse LBDn message 0x%03X %d %d\n",message, ptBegin.x, ptBegin.y);
             break;
+        case WM_KEYUP:
         case WM_LBUTTONUP:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONUP:
             ptEnd.x = LOWORD(lParam);
             ptEnd.y = HIWORD(lParam);
             guiDirty++;
             printf("Here is a Mouse LBUp message 0x%03X %d %d\n",message, ptEnd.x, ptEnd.y);
             break;
+        case WM_LBUTTONDBLCLK:
+        case WM_RBUTTONDBLCLK:
+        case WM_MBUTTONDBLCLK:
+            ptEnd.x = LOWORD(lParam);
+            ptEnd.y = HIWORD(lParam);
+            guiDirty++;
+            printf("Here is a Mouse LBDc message 0x%03X %d %d\n",message, ptEnd.x, ptEnd.y);
+            break;
+
+        case WM_MOUSEHOVER:
+        case WM_MOUSELEAVE:
+        case WM_MOUSEWHEEL:
         case WM_MOUSEMOVE:
             ptMove.x = LOWORD(lParam);
             ptMove.y = HIWORD(lParam);
