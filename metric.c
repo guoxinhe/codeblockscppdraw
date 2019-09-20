@@ -9,21 +9,19 @@
 #define MATRIC_FLOAT   1
 #define MATRIC_DOUBLE  2
 #define MATRIC_DEFAULT 1
-#define MATRIC_MAXROW 8
-#define MATRIC_MAXCOL 8
+#define MATRIC_MAXROW 4
+#define MATRIC_MAXCOL 4
 #define Matric Matrif
-typedef struct  {
-    int row, col, type, flags;
-    int ma[MATRIC_MAXROW][MATRIC_MAXCOL];
-}Matriz;
+
 typedef struct  {
     int row, col, type, flags;
     float ma[MATRIC_MAXROW][MATRIC_MAXCOL];
 }Matrif;
 typedef struct  {
     int row, col, type, flags;
-    double ma[MATRIC_MAXROW][MATRIC_MAXCOL];
-}Matrid;
+    float ma[1024][MATRIC_MAXCOL];
+}Shapeva;
+
 #define CHECK_VALID(ex) do{if(!(ex)){printf("Invalid at source code %s:%d\n",__FILE__,__LINE__);}}while(0)
 #define CHECK_VALID_MATRIC(mat) \
     CHECK_VALID(mat!=NULL && mat->row>0 && mat->row<=MATRIC_MAXROW && mat->col>0 &&mat->col<=MATRIC_MAXCOL)
@@ -236,9 +234,100 @@ void matridRotate(Matric *mat, int angx, int angy, int angz) {
     }
 }
 
+void shapeTransCeqAxB(Shapeva *c, Shapeva *a, Matric *b) {
+    CHECK_VALID(c!=NULL);
+    CHECK_VALID(a!=NULL);
+    CHECK_VALID_MATRIC(b);
+    CHECK_VALID(a->col==b->row);
+    memset(c, 0, sizeof(*c));
+    c->row=a->row;
+    c->col=b->col;
+
+    int row, col, rowCol;
+    float cRC;
+    for(row=0;row<c->row;row++) {
+        for(col=0;col<c->col;col++) {
+            cRC=0;
+            for(rowCol=0;rowCol<a->col;rowCol++) {
+                cRC+=a->ma[row][rowCol]*b->ma[rowCol][col];
+            }
+            c->ma[row][col]=cRC;
+        }
+    }
+}
+void shapeDump(Shapeva *sva) {
+    int row, col;
+    CHECK_VALID(NULL!=sva);
+    printf("Dump shape row x col: %d x %d ={\n", sva->row, sva->col);
+    for(row=0;row<sva->row;row++) {
+        for(col=0;col<sva->col;col++) {
+            printf("    %4.4f,", sva->ma[row][col]);
+        }
+        printf("\n");
+    }
+    printf("}\n");
+}
+void shapeCreatePreset( Shapeva *sva, int preModel) {
+    if(preModel!=0)
+        return ;
+
+
+    memset(sva, 0, sizeof(*sva));
+    sva->row=1024;
+    sva->col=4;
+    int row;
+    for(row=0;row<sva->row;row++) {
+        sva->ma[row][3]=1.0f;
+    }
+    float x,y,z,r,angle;
+    for(row=0;row<sva->row;row++) {
+        y = 16.0f - row*1.0f/32.0f;
+        r = row*1.0f/32.0f;
+        angle= M_PI*2*(row%32)/32.0f;
+        x = r * cos(angle);
+        z = r * sin(angle);
+        sva->ma[row][0]=x;
+        sva->ma[row][1]=y;
+        sva->ma[row][2]=z;
+    }
+};
+
+Shapeva finalModel; //crated but not transfered
+Shapeva finalShape; //transfered but not project
+Shapeva finalCamera, finalFront, finalLeft, finalTop; //4 project view
+
+Matric projFront, projLeft, projTop, projCamera;
+void initProject(void) {
+    matriSetInitUnit(&projCamera, 4, 4);
+    matriSetInitUnit(&projFront, 4, 4);
+    matriSetInitUnit(&projLeft, 4, 4);
+    matriSetInitUnit(&projTop, 4, 4);
+
+    matriSetProjectXY(&projFront);
+    matriSetProjectYZ(&projLeft);
+    matriSetProjectXZ(&projTop);
+
+    Matric tmpCamera;
+    matriSetInitUnit(&tmpCamera, 4, 4);
+    matridRotate(&tmpCamera, 30, 45, 0);
+    matriCeqAxB(&projCamera, &tmpCamera, &projFront);
+
+    shapeTransCeqAxB(&finalCamera, &finalShape, &projCamera);
+    shapeTransCeqAxB(&finalFront, &finalShape, &projFront);
+    shapeTransCeqAxB(&finalLeft, &finalShape, &projLeft);
+    shapeTransCeqAxB(&finalTop, &finalShape, &projTop);
+
+    printf("Show shape finalModel \n"); shapeDump(&finalModel );
+    printf("Show shape finalShape \n"); shapeDump(&finalShape );
+    printf("Show shape finalFront \n"); shapeDump(&finalFront );
+    printf("Show shape finalLeft  \n"); shapeDump(&finalLeft  );
+    printf("Show shape finalTop   \n"); shapeDump(&finalTop   );
+    printf("Show shape finalCamera\n"); shapeDump(&finalCamera);
+}
 
 int matridTest(void) {
     Matric localMat, *mat=&localMat;
+    Shapeva *shape = &finalModel;
     matriSetInitUnit(mat, 4, 4);
     printf("Show unit\n");
     matriDump(mat);
@@ -274,6 +363,16 @@ int matridTest(void) {
     matridRotate(mat, 45, 60, 75);
     matridShift(mat, 10, 20, 30);
     matriDump(mat);
+
+    shapeCreatePreset(shape, 0);
+    //shapeDump(shape);
+
+    matriSetUnit(mat);
+    matridRotate(mat, 0, 0, 90);
+    shapeTransCeqAxB(&finalShape, shape, mat);
+    //shapeDump(&finalShape);
+
+    initProject();
 
     return 0;
 }
