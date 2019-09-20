@@ -253,17 +253,18 @@ static POINT ptMove;//mouse move
 static int guiDirty=0;//need render
 static int msgCount=0;//debug counter
 static HWND hwndMain=NULL;
-HBRUSH hBrushBG, hBrushFG;
+static HBRUSH hBrushBG, hBrushFG;
 struct RenderBuffer {
     HDC renderDC;
     HBITMAP renderBmp;
     //other attribute for this buffer
     DWORD renderCount, displayCount;
+    COLORREF bgColor;
 };
 struct RenderBuffer renderBuffer[2];//2 buffer for ping pang render/display
 
 void createGlobalResource() {
-    hBrushBG = CreateSolidBrush(RGB(0,128,0));
+    hBrushBG = CreateSolidBrush(RGB(16,16,16));
     hBrushFG = CreateSolidBrush(RGB(rand() % 256, rand() % 256, rand() % 256));
 }
 void destroyGlobalResource() {
@@ -278,9 +279,11 @@ void createWindowResource(HWND hwnd) {
     DWORD renderWidth=2560*2, renderHeight=1080*2;
     RECT rect;
     SetRect(&rect, 0, 0, renderWidth, renderHeight);
+    COLORREF bgColor[2]={RGB(128,0,0),RGB(0,0,128)};
     for(i=0;i<2;i++) {
         renderBuffer[i].renderCount=0;
         renderBuffer[i].displayCount=0;
+        renderBuffer[i].bgColor=bgColor[i];
         // 1.创建兼容缓冲区
         renderBuffer[i].renderDC = CreateCompatibleDC(hdc);   // 创建兼容DC
         // 创建兼容位图画布
@@ -289,9 +292,8 @@ void createWindowResource(HWND hwnd) {
             printf("Fatal error, out of memory when CreateCompatibleBitmap(hdc, 2560*2, 1080*2);");
         } else {
             SelectObject(renderBuffer[i].renderDC, renderBuffer[i].renderBmp);    // 选入
-
             //debug optional initialize to a back ground color
-            HBRUSH hBrushTmp=CreateSolidBrush(RGB(128*i,0, 128*(1-i)));
+            HBRUSH hBrushTmp=CreateSolidBrush(bgColor[i]);
             FillRect(renderBuffer[i].renderDC, &rect, hBrushTmp);
             DeleteObject(hBrushTmp);
         }
