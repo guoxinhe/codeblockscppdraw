@@ -14,5 +14,6 @@ struct pluginObject {
     int (*registerObj)(int category, void *obj);
 };
 extern struct pluginObject plugina;
+extern struct pluginObject pluginm3d;
 
 #endif // __PLUGIN_H__

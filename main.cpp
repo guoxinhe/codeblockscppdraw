@@ -18,6 +18,7 @@
 #include <math.h>//for sin(float);
 #include "plugin.h"
 
+#define TESTPLUGIN pluginm3d
 #define exInc(pLong) InterlockedIncrement((volatile LONG *)pLong)            //++
 #define exDec(pLong) InterlockedDecrement((volatile LONG *)pLong)            //--
 #define exAdd(pLong,val) InterlockedExchangeAdd((volatile LONG *)pLong, val) //+=
@@ -80,9 +81,9 @@ DWORD WINAPI ThreadFuncDisplay(LPVOID lpParam) {
             displayedOn = displayBusyOn;
             ++displayedCount;
             DisplayBuffer(displayBusyOn);
-            printf("Display buffer %s #%lu/%lu\n",
-                displayBufferName[displayBusyOn],
-                displayedCount, readeredCount);
+            //printf("Display buffer %s #%lu/%lu\n",
+            //    displayBufferName[displayBusyOn],
+            //    displayedCount, readeredCount);
             exSet(&displayBusy,0);
         } else
             Sleep((DWORD)lpParam);//in ms
@@ -272,6 +273,9 @@ void destroyGlobalResource() {
 	DeleteObject(hBrushFG);
     hBrushBG = NULL;
     hBrushFG = NULL;
+
+    extern int matridTest(void);
+    //matridTest();
 }
 void createWindowResource(HWND hwnd) {
     HDC hdc = GetDC(hwnd);
@@ -299,14 +303,14 @@ void createWindowResource(HWND hwnd) {
         }
     }
 
-    plugina.open(0);
-    plugina.registerObj(0, hdc);
-    plugina.user(0,0,0);
+    TESTPLUGIN.open(0);
+    TESTPLUGIN.registerObj(0, hdc);
+    TESTPLUGIN.user(0,0,0);
     ReleaseDC(hwnd, hdc);
 }
 void destroyWindowResource(HWND hwnd) {
     int i;
-    plugina.close();
+    TESTPLUGIN.close();
     for(i=0;i<2;i++) {
         // 4.释放缓冲区DC
         DeleteDC(renderBuffer[i].renderDC);
@@ -479,8 +483,8 @@ void drawOnBGDC(HWND hWindow, HDC hdc, int index) {
  	FillRect(memoryDC, &rect, hBrushFG);
  	}
 
-    plugina.render(hdc);
-    plugina.display(memoryDC, clientWidth, clientHeight);
+    TESTPLUGIN.render(hdc);
+    TESTPLUGIN.display(memoryDC, clientWidth, clientHeight);
 	//在兼容DC中间位置输出字符串, 相当于把hbmp这个位图加上了文字标注,
     //DrawText(memoryDC,"Center Line Text", -1, &rect, DT_VCENTER|DT_SINGLELINE|DT_CENTER);
     SetRect(&rect, 0, 0, clientWidth, clientHeight);
@@ -641,7 +645,7 @@ void checkDirty(HWND hwnd)
         guiDirty=0;
         //force update GUI.
         HDC         hdc;
-        //在处理非WM_PAINT消息时由Windows程序获取：
+        //在处理非WM_PAINT消息时由Windows程序获取：matridTest
         hdc = GetDC(hwnd);
         //获得用于整个窗口的，而不仅仅是窗口客户区的设备环境句柄：
         //hdc = GetWindowDC(hwnd);

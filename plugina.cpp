@@ -18,12 +18,6 @@
 #include <math.h>//for sin(float);
 #include "plugin.h"
 
-#define exInc(pLong) InterlockedIncrement((volatile LONG *)pLong)            //++
-#define exDec(pLong) InterlockedDecrement((volatile LONG *)pLong)            //--
-#define exAdd(pLong,val) InterlockedExchangeAdd((volatile LONG *)pLong, val) //+=
-#define exSet(pLong,val) InterlockedExchange((volatile LONG *)pLong, val)    //=
-#define exMod(pLong,to,out) InterlockedCompareExchange((volatile LONG *)pLong, to, out)
-
 #define PI      (3.14159)
 #define TWOPI   (2*3.14159)
 #define TWO_PI  TWOPI
