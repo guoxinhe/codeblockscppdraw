@@ -38,11 +38,38 @@ static HBRUSH hBrushBG, hBrushFG;
 static HPEN hNullPen;
 static RECT renderRect;
 static COLORREF colorBG=RGB(0, 64, 64), colorFG=RGB(128, 128, 128);
+static Matric shapeAdjust;
 static void initLocal(void) {
-    Matric localMat, *mat=&localMat;
     Shapeva *shape = &finalModel;
 
-    shapeCreatePreset(shape, 1);
+    shapeCreatePreset(shape, 0);
+    int i;
+    Matric *mat=&shapeAdjust;
+    memset(&shapeAdjust, 0, sizeof(shapeAdjust));
+    for(i=0;i<shape->row;i++) {
+        if(shape->ma[i][0]<mat->ma[0][0]) mat->ma[0][0]=shape->ma[i][0];
+        if(shape->ma[i][1]<mat->ma[0][1]) mat->ma[0][1]=shape->ma[i][1];
+        if(shape->ma[i][2]<mat->ma[0][2]) mat->ma[0][2]=shape->ma[i][2];
+
+        if(shape->ma[i][0]>mat->ma[1][0]) mat->ma[1][0]=shape->ma[i][0];
+        if(shape->ma[i][1]>mat->ma[1][1]) mat->ma[1][1]=shape->ma[i][1];
+        if(shape->ma[i][2]>mat->ma[1][2]) mat->ma[1][2]=shape->ma[i][2];
+    }
+    //the proper center for scale and rotate
+    mat->ma[2][0]=(mat->ma[0][0]+mat->ma[1][0])/2;
+    mat->ma[2][1]=(mat->ma[0][1]+mat->ma[1][1])/2;
+    mat->ma[2][2]=(mat->ma[0][2]+mat->ma[1][2])/2;
+
+    //the size of 3 dimension
+    mat->ma[3][0]=(mat->ma[1][0]-mat->ma[0][0]);
+    mat->ma[3][1]=(mat->ma[1][1]-mat->ma[0][1]);
+    mat->ma[3][2]=(mat->ma[1][2]-mat->ma[0][2]);
+    //a proper scale ratio for render to 200x200 window
+    float length;
+    length=mat->ma[3][0];
+    if(mat->ma[3][1]>length) length=mat->ma[3][1];
+    if(mat->ma[3][2]>length) length=mat->ma[3][2];
+    mat->ma[3][3] = 200/length;
 
     HDC hdc = hdcRegisted;
     renderDC = CreateCompatibleDC(hdc);
@@ -86,20 +113,20 @@ static int plugina_render(void *target) {
         FillRect(hdc, &renderRect, hBrushBG);
     }
 
-    //rotateX = (rotateX+1)%360;
-    //rotateY = (rotateY+1)%360;
-    //rotateZ = (rotateY+1)%360;
-
     Matric localMat, *mat=&localMat;
     matricSetInitUnit(mat,4,4);
 
     //adjust model to center if its center is not at (0,0,0)
-    matricSetShift(mat, -0.5f, -0.5f, -0.5f);
-    shapeTransCeqAxB(&finalShape, &finalModel, mat);
+    if(1) {
+        matricSetShift(mat, -shapeAdjust.ma[2][0], -shapeAdjust.ma[2][1], -shapeAdjust.ma[2][2]);
+        shapeTransCeqAxB(&finalShape, &finalModel, mat);
+    } else {
+        shapeClone(&finalShape, &finalModel);
+    }
 
     //scale, and rotate model to final shape, and put to final position
     matricSetUnit(mat);
-    matridScale(mat, 100, 100, 100);
+    matridScale(mat, shapeAdjust.ma[3][3], shapeAdjust.ma[3][3], shapeAdjust.ma[3][3]);
     matridRotate(mat, rotateX, rotateY, rotateZ);
     matridShift(mat, shiftX, shiftY, shiftZ);
     shapeTransCeqAxB(&finalCamera, &finalShape, mat);
@@ -120,37 +147,41 @@ static int plugina_render(void *target) {
     #define shapeLineDraw(hdc, sp, v0, v1) \
         MoveToEx(hdc, sp->ma[v0][0], sp->ma[v0][1], NULL);\
         LineTo(hdc, sp->ma[v1][0], sp->ma[v1][1])
+    int vid;
     if(sp->draw==0) {
-        shapeLineDraw(hdc, sp, 0, 2);
-        shapeLineDraw(hdc, sp, 2, 3);
-        shapeLineDraw(hdc, sp, 3, 1);
-        shapeLineDraw(hdc, sp, 1, 0);
-        shapeLineDraw(hdc, sp, 0, 4);
-        shapeLineDraw(hdc, sp, 4, 6);
-        shapeLineDraw(hdc, sp, 6, 7);
-        shapeLineDraw(hdc, sp, 7, 5);
-        shapeLineDraw(hdc, sp, 5, 4);
-        shapeLineDraw(hdc, sp, 2, 6);
-        shapeLineDraw(hdc, sp, 3, 7);
-        shapeLineDraw(hdc, sp, 1, 5);
+        for(vid=0;vid<sp->row;vid+=8) {
+            shapeLineDraw(hdc, sp, vid+0, vid+2);
+            shapeLineDraw(hdc, sp, vid+2, vid+3);
+            shapeLineDraw(hdc, sp, vid+3, vid+1);
+            shapeLineDraw(hdc, sp, vid+1, vid+0);
+            shapeLineDraw(hdc, sp, vid+0, vid+4);
+            shapeLineDraw(hdc, sp, vid+4, vid+6);
+            shapeLineDraw(hdc, sp, vid+6, vid+7);
+            shapeLineDraw(hdc, sp, vid+7, vid+5);
+            shapeLineDraw(hdc, sp, vid+5, vid+4);
+            shapeLineDraw(hdc, sp, vid+2, vid+6);
+            shapeLineDraw(hdc, sp, vid+3, vid+7);
+            shapeLineDraw(hdc, sp, vid+1, vid+5);
+        }
     } else if(sp->draw==1) {
-        shapeLineDraw(hdc, sp, 4, 7);
-        shapeLineDraw(hdc, sp, 7, 3);
-        shapeLineDraw(hdc, sp, 3, 0);
-        shapeLineDraw(hdc, sp, 0, 4);
-        shapeLineDraw(hdc, sp, 4, 5);
-        shapeLineDraw(hdc, sp, 5, 6);
-        shapeLineDraw(hdc, sp, 6, 2);
-        shapeLineDraw(hdc, sp, 2, 1);
-        shapeLineDraw(hdc, sp, 1, 5);
-        shapeLineDraw(hdc, sp, 7, 6);
-        shapeLineDraw(hdc, sp, 3, 2);
-        shapeLineDraw(hdc, sp, 0, 1);
+        for(vid=0;vid<sp->row;vid+=8) {
+            shapeLineDraw(hdc, sp, vid+4, vid+7);
+            shapeLineDraw(hdc, sp, vid+7, vid+3);
+            shapeLineDraw(hdc, sp, vid+3, vid+0);
+            shapeLineDraw(hdc, sp, vid+0, vid+4);
+            shapeLineDraw(hdc, sp, vid+4, vid+5);
+            shapeLineDraw(hdc, sp, vid+5, vid+6);
+            shapeLineDraw(hdc, sp, vid+6, vid+2);
+            shapeLineDraw(hdc, sp, vid+2, vid+1);
+            shapeLineDraw(hdc, sp, vid+1, vid+5);
+            shapeLineDraw(hdc, sp, vid+7, vid+6);
+            shapeLineDraw(hdc, sp, vid+3, vid+2);
+            shapeLineDraw(hdc, sp, vid+0, vid+1);
+        }
     } else {
-        int i;
         MoveToEx(hdc, sp->ma[0][0], sp->ma[0][1], NULL);
-        for(i=0;i<sp->row;i++) {
-            LineTo(hdc, sp->ma[i][0], sp->ma[i][1]);
+        for(vid=0;vid<sp->row;vid++) {
+            LineTo(hdc, sp->ma[vid][0], sp->ma[vid][1]);
         }
         LineTo(hdc, sp->ma[0][0], sp->ma[0][1]);
     }
