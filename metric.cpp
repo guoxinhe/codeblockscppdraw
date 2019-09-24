@@ -83,7 +83,7 @@ void matricSetFromArray(Matric *mat, float *ar) {
         }
     }
 }
-void matricSetShift(Matric *mat, int x, int y, int z) {
+void matricSetShift(Matric *mat, float x, float y, float z) {
     matricSetUnit(mat);
     mat->ma[3][0]=x;
     mat->ma[3][1]=y;
@@ -205,7 +205,7 @@ void matricDump(Matric *mat) {
     printf("}\n");
 }
 
-void matridShift(Matric *mat, int x, int y, int z) {
+void matridShift(Matric *mat, float x, float y, float z) {
     CHECK_VALID_MATRIC(mat);
     CHECK_VALID(4==mat->row && 4==mat->col);
     Matric a, b;
@@ -249,24 +249,25 @@ void matridScale(Matric *mat, float rx, float ry, float rz) {
     matricSetCopy(&a, mat);
     matricCeqAxB(mat, &a, &b);
 }
-void shapeTransCeqAxB(Shapeva *c, Shapeva *a, Matric *b) {
-    CHECK_VALID(c!=NULL);
-    CHECK_VALID(a!=NULL);
-    CHECK_VALID_MATRIC(b);
-    CHECK_VALID(a->col==b->row);
-    memset(c, 0, sizeof(*c));
-    c->row=a->row;
-    c->col=b->col;
+void shapeTransCeqAxB(Shapeva *dst, Shapeva *src, Matric *mat) {
+    CHECK_VALID(dst!=NULL);
+    CHECK_VALID(src!=NULL);
+    CHECK_VALID_MATRIC(mat);
+    CHECK_VALID(src->col==mat->row);
+    memset(dst, 0, sizeof(*dst));
+    dst->row=src->row;
+    dst->col=mat->col;
+    dst->draw=src->draw;
 
     int row, col, rowCol;
     float cRC;
-    for(row=0;row<c->row;row++) {
-        for(col=0;col<c->col;col++) {
+    for(row=0;row<dst->row;row++) {
+        for(col=0;col<dst->col;col++) {
             cRC=0;
-            for(rowCol=0;rowCol<a->col;rowCol++) {
-                cRC+=a->ma[row][rowCol]*b->ma[rowCol][col];
+            for(rowCol=0;rowCol<src->col;rowCol++) {
+                cRC+=src->ma[row][rowCol]*mat->ma[rowCol][col];
             }
-            c->ma[row][col]=cRC;
+            dst->ma[row][col]=cRC;
         }
     }
 }

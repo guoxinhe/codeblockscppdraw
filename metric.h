@@ -34,7 +34,7 @@ void matricSetUnit(Matric *mat);
 void matricSetCopy(Matric *mat, Matric *matsrc);
 void matricSetElement(Matric *mat, int row, int col, float val);
 void matricSetFromArray(Matric *mat, float *ar);
-void matricSetShift(Matric *mat, int x, int y, int z);
+void matricSetShift(Matric *mat, float x, float y, float z);
 void matricSetRotatex(Matric *mat, int angleOf360);
 void matricSetRotatey(Matric *mat, int angleOf360);
 void matricSetRotatez(Matric *mat, int angleOf360);
@@ -55,7 +55,7 @@ void matricSetProjectYZ(Matric *mat);
 void matricCeqAxB(Matric *c, Matric *a, Matric *b);
 void matricDump(Matric *mat);
 
-void matridShift(Matric *mat, int x, int y, int z);
+void matridShift(Matric *mat, float x, float y, float z);
 void matridRotate(Matric *mat, int angx, int angy, int angz);
 void matridScale(Matric *mat, float rx, float ry, float rz);
 

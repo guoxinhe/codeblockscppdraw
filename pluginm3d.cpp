@@ -26,6 +26,7 @@
 int rotateX=0, rotateY=0, rotateZ=0;
 int shiftX=200, shiftY=160, shiftZ=0;
 Shapeva finalModel; //crated but not transfered
+Shapeva finalShape; //crated but not transfered
 Shapeva finalCamera;
 
 
@@ -41,7 +42,7 @@ static void initLocal(void) {
     Matric localMat, *mat=&localMat;
     Shapeva *shape = &finalModel;
 
-    shapeCreatePreset(shape, 0);
+    shapeCreatePreset(shape, 1);
 
     HDC hdc = hdcRegisted;
     renderDC = CreateCompatibleDC(hdc);
@@ -81,12 +82,19 @@ static int plugina_render(void *target) {
 
     Matric localMat, *mat=&localMat;
     matricSetInitUnit(mat,4,4);
+
+    //adjust model to center if its center is not at (0,0,0)
+    matricSetShift(mat, -0.5f, -0.5f, -0.5f);
+    shapeTransCeqAxB(&finalShape, &finalModel, mat);
+
+    //scale, and rotate model to final shape, and put to final position
+    matricSetUnit(mat);
     matridScale(mat, 100, 100, 100);
     matridRotate(mat, rotateX, rotateY, rotateZ);
     matridShift(mat, shiftX, shiftY, shiftZ);
-    shapeTransCeqAxB(&finalCamera, &finalModel, mat);
+    shapeTransCeqAxB(&finalCamera, &finalShape, mat);
 
-    Shapeva *sp = & finalCamera;
+    Shapeva *sp = &finalCamera;
             /*   model 1: 1x1x1            model 2: 2x2x2
                       0 .------------. 1      1 .------------. 5
                        /.           /|         /.           /|
@@ -102,18 +110,40 @@ static int plugina_render(void *target) {
     #define shapeLineDraw(hdc, sp, v0, v1) \
         MoveToEx(hdc, sp->ma[v0][0], sp->ma[v0][1], NULL);\
         LineTo(hdc, sp->ma[v1][0], sp->ma[v1][1])
-    shapeLineDraw(renderDC, sp, 0, 2);
-    shapeLineDraw(renderDC, sp, 2, 3);
-    shapeLineDraw(renderDC, sp, 3, 1);
-    shapeLineDraw(renderDC, sp, 1, 0);
-    shapeLineDraw(renderDC, sp, 0, 4);
-    shapeLineDraw(renderDC, sp, 4, 6);
-    shapeLineDraw(renderDC, sp, 6, 7);
-    shapeLineDraw(renderDC, sp, 7, 5);
-    shapeLineDraw(renderDC, sp, 5, 4);
-    shapeLineDraw(renderDC, sp, 2, 6);
-    shapeLineDraw(renderDC, sp, 3, 7);
-    shapeLineDraw(renderDC, sp, 1, 5);
+    if(sp->draw==0) {
+        shapeLineDraw(renderDC, sp, 0, 2);
+        shapeLineDraw(renderDC, sp, 2, 3);
+        shapeLineDraw(renderDC, sp, 3, 1);
+        shapeLineDraw(renderDC, sp, 1, 0);
+        shapeLineDraw(renderDC, sp, 0, 4);
+        shapeLineDraw(renderDC, sp, 4, 6);
+        shapeLineDraw(renderDC, sp, 6, 7);
+        shapeLineDraw(renderDC, sp, 7, 5);
+        shapeLineDraw(renderDC, sp, 5, 4);
+        shapeLineDraw(renderDC, sp, 2, 6);
+        shapeLineDraw(renderDC, sp, 3, 7);
+        shapeLineDraw(renderDC, sp, 1, 5);
+    } else if(sp->draw==1) {
+        shapeLineDraw(renderDC, sp, 4, 7);
+        shapeLineDraw(renderDC, sp, 7, 3);
+        shapeLineDraw(renderDC, sp, 3, 0);
+        shapeLineDraw(renderDC, sp, 0, 4);
+        shapeLineDraw(renderDC, sp, 4, 5);
+        shapeLineDraw(renderDC, sp, 5, 6);
+        shapeLineDraw(renderDC, sp, 6, 2);
+        shapeLineDraw(renderDC, sp, 2, 1);
+        shapeLineDraw(renderDC, sp, 1, 5);
+        shapeLineDraw(renderDC, sp, 7, 6);
+        shapeLineDraw(renderDC, sp, 3, 2);
+        shapeLineDraw(renderDC, sp, 0, 1);
+    } else {
+        int i;
+        MoveToEx(renderDC, sp->ma[0][0], sp->ma[0][1], NULL);
+        for(i=0;i<sp->row;i++) {
+            LineTo(renderDC, sp->ma[i][0], sp->ma[i][1]);
+        }
+        LineTo(renderDC, sp->ma[0][0], sp->ma[0][1]);
+    }
     return 0;
 }
 static int plugina_display(void *target, int winW, int winH) {
