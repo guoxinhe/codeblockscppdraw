@@ -253,6 +253,7 @@ static POINT ptEnd;//mouse left up
 static POINT ptMove;//mouse move
 static int guiDirty=0;//need render
 static int msgCount=0;//debug counter
+static int userControlShowTitle=0;
 static HWND hwndMain=NULL;
 static HBRUSH hBrushBG, hBrushFG;
 struct RenderBuffer {
@@ -430,6 +431,7 @@ void drawDCGrid(HDC hdc, int rows, int cols, int fillRandomColor) {
             if((ptMove.x>=rect.left-2 && ptMove.x<rect.right+2 &&
                 ptMove.y>=rect.top-2 && ptMove.y<rect.bottom+2) ||
                 fillRandomColor==0xFF) {
+                if(userControlShowTitle) {
                 HBRUSH hBrush;
                 if(fillRandomColor==0xFF)
                     hBrush = CreateSolidBrush(RGB(rand() % 256, rand() % 256, rand() % 256));
@@ -438,6 +440,7 @@ void drawDCGrid(HDC hdc, int rows, int cols, int fillRandomColor) {
                 FillRect(hdc, &rect, hBrush);
                 DrawText(hdc, "A", -1, &rect, DT_VCENTER|DT_SINGLELINE|DT_CENTER);
                 DeleteObject(hBrush);
+                }
             }
         }
     }
@@ -486,6 +489,7 @@ void drawOnBGDC(HWND hWindow, HDC hdc, int index) {
  	TESTPLUGIN.user(1,0,0);
     //TESTPLUGIN.render(NULL);
     TESTPLUGIN.display(memoryDC, clientWidth, clientHeight);
+    if(userControlShowTitle) {
 	//在兼容DC中间位置输出字符串, 相当于把hbmp这个位图加上了文字标注,
     //DrawText(memoryDC,"Center Line Text", -1, &rect, DT_VCENTER|DT_SINGLELINE|DT_CENTER);
     SetRect(&rect, 0, 0, clientWidth, clientHeight);
@@ -494,12 +498,14 @@ void drawOnBGDC(HWND hWindow, HDC hdc, int index) {
         displayBufferName[index], renderIdentifier,
         displayedCount, readeredCount);
     DrawText(memoryDC, title, -1, &rect, DT_TOP|DT_SINGLELINE|DT_CENTER);
+
     rect.top += 24;
     sprintf(title, "  RenderBuffer display/render %lu/%lu msg:%x %x %x %d %d  ",
         renderBuffer[index].displayCount, renderBuffer[index].renderCount,
         renderIdentifier, renderIdwp, renderIdlp,
         LOWORD(renderIdlp), HIWORD(renderIdlp));
     DrawText(memoryDC, title, -1, &rect, DT_TOP|DT_SINGLELINE|DT_CENTER);
+    }
 }
 void drawFromBGDC(HWND hWindow, HDC hdc, int index) {
     HDC memoryDC=renderBuffer[index].renderDC;
@@ -763,6 +769,8 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
             ptEnd.y = ptMove.y = HIWORD(lParam);
             guiDirty++;
             printf("Here is a Mouse LBUp message 0x%03X %d %d\n",message, ptEnd.x, ptEnd.y);
+            if(message == WM_RBUTTONUP)
+                userControlShowTitle = 1 - userControlShowTitle;
             break;
         case WM_LBUTTONDBLCLK:
         case WM_RBUTTONDBLCLK:

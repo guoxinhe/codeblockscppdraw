@@ -23,7 +23,7 @@
 #define TWOPI   (2*3.14159)
 #define TWO_PI  TWOPI
 
-int rotateX=0, rotateY=0, rotateZ=0;
+float rotateX=0, rotateY=0, rotateZ=0;
 int shiftX=200, shiftY=160, shiftZ=0;
 Shapeva finalModel; //crated but not transfered
 Shapeva finalShape; //crated but not transfered
@@ -42,7 +42,7 @@ static Matric shapeAdjust;
 static void initLocal(void) {
     Shapeva *shape = &finalModel;
 
-    shapeCreatePreset(shape, 0);
+    shapeCreatePreset(shape, 2);
     int i;
     Matric *mat=&shapeAdjust;
     memset(&shapeAdjust, 0, sizeof(shapeAdjust));
@@ -69,7 +69,10 @@ static void initLocal(void) {
     length=mat->ma[3][0];
     if(mat->ma[3][1]>length) length=mat->ma[3][1];
     if(mat->ma[3][2]>length) length=mat->ma[3][2];
-    mat->ma[3][3] = 200/length;
+
+    float minofWin=shiftX;
+    if(minofWin<shiftY) minofWin=shiftY;
+    mat->ma[3][3] = minofWin/length;
 
     HDC hdc = hdcRegisted;
     renderDC = CreateCompatibleDC(hdc);
@@ -96,9 +99,9 @@ static int plugina_user(int msg, DWORD wParam, void *lParam) {
     if(msg==0)
         initLocal();
     if(msg==1) {//auto daemon
-        rotateX = (rotateX+1)%360;
-        rotateY = (rotateY+1)%360;
-        rotateZ = (rotateY+1)%360;
+        rotateX = (rotateX+1);
+        rotateY = (rotateY+0.719);
+        rotateZ = (rotateY+0.53);
     }
     return 0;
 }
@@ -126,7 +129,17 @@ static int plugina_render(void *target) {
 
     //scale, and rotate model to final shape, and put to final position
     matricSetUnit(mat);
-    matridScale(mat, shapeAdjust.ma[3][3], shapeAdjust.ma[3][3], shapeAdjust.ma[3][3]);
+
+    float length;
+    length=shapeAdjust.ma[3][0];
+    if(shapeAdjust.ma[3][1]>length) length=shapeAdjust.ma[3][1];
+    if(shapeAdjust.ma[3][2]>length) length=shapeAdjust.ma[3][2];
+
+    float minofWin=shiftX;
+    if(minofWin>shiftY) minofWin=shiftY;
+    float adjRatio = minofWin/length;//shapeAdjust.ma[3][3]
+
+    matridScale(mat, adjRatio, adjRatio, adjRatio);
     matridRotate(mat, rotateX, rotateY, rotateZ);
     matridShift(mat, shiftX, shiftY, shiftZ);
     shapeTransCeqAxB(&finalCamera, &finalShape, mat);
@@ -190,6 +203,8 @@ static int plugina_render(void *target) {
 static int plugina_display(void *target, int winW, int winH) {
     HDC hdc=(HDC)target;
     //BitBlt(hdc, 0, 0, renderWidth, renderHeight, renderDC, 0, 0, SRCCOPY);
+    shiftX = winW/2;
+    shiftY = winH/2;
     plugina_render(hdc);
     return 0;
 }
