@@ -60,6 +60,7 @@ void matridRotate(Matric *mat, int angx, int angy, int angz);
 void matridScale(Matric *mat, float rx, float ry, float rz);
 
 void shapeTransCeqAxB(Shapeva *c, Shapeva *a, Matric *b);
+void shapeClone(Shapeva *dst, Shapeva *src);
 void shapeDump(Shapeva *sva);
 void shapeCreatePreset(Shapeva *sva, int preModel);
 

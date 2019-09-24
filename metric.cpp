@@ -209,7 +209,7 @@ void matridShift(Matric *mat, int x, int y, int z) {
     CHECK_VALID_MATRIC(mat);
     CHECK_VALID(4==mat->row && 4==mat->col);
     Matric a, b;
-    matricSetInitZero(&b, mat->row, mat->col);
+    matricSetInitUnit(&b, mat->row, mat->col);
 
     matricSetCopy(&a, mat);
     matricSetShift(&b, x, y, z);
@@ -219,25 +219,32 @@ void matridRotate(Matric *mat, int angx, int angy, int angz) {
     CHECK_VALID_MATRIC(mat);
     CHECK_VALID(4==mat->row && 4==mat->col);
     Matric a, b;
-    matricSetInitZero(&b, mat->row, mat->col);
+    matricSetInitUnit(&b, mat->row, mat->col);
 
-    if(angx!=0)
+    if(angx!=0) {
         matricSetRotatex(&b, angx);
-    if(angy!=0)
+        matricSetCopy(&a, mat);
+        matricCeqAxB(mat, &a, &b);
+    }
+    if(angy!=0) {
         matricSetRotatey(&b, angy);
-    if(angz!=0)
+        matricSetCopy(&a, mat);
+        matricCeqAxB(mat, &a, &b);
+    }
+    if(angz!=0) {
         matricSetRotatez(&b, angz);
-    matricSetCopy(&a, mat);
-    matricCeqAxB(mat, &a, &b);
+        matricSetCopy(&a, mat);
+        matricCeqAxB(mat, &a, &b);
+    }
 }
 void matridScale(Matric *mat, float rx, float ry, float rz) {
     CHECK_VALID_MATRIC(mat);
     CHECK_VALID(4==mat->row && 4==mat->col);
     Matric a, b;
-    matricSetInitZero(&b, mat->row, mat->col);
-    if(rx==ry && ry==rz && rz!=0.0f && rz!=1.0f)
-        matricSetScale(&b, rx);
-    else
+    matricSetInitUnit(&b, mat->row, mat->col);
+    //if(rx==ry && ry==rz && rz!=0.0f && rz!=1.0f)
+    //    matricSetScale(&b, 1.0f/rz);
+    //else
         matricSetScaleDim(&b, rx, ry, rz);
     matricSetCopy(&a, mat);
     matricCeqAxB(mat, &a, &b);
@@ -262,6 +269,9 @@ void shapeTransCeqAxB(Shapeva *c, Shapeva *a, Matric *b) {
             c->ma[row][col]=cRC;
         }
     }
+}
+void shapeClone(Shapeva *dst, Shapeva *src) {
+    memcpy(dst, src, sizeof(*dst));
 }
 void shapeDump(Shapeva *sva) {
     int row, col;

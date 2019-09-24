@@ -26,7 +26,6 @@
 int rotateX=0, rotateY=0, rotateZ=0;
 int shiftX=200, shiftY=160, shiftZ=0;
 Shapeva finalModel; //crated but not transfered
-Shapeva finalShape; //transfered but not project
 Shapeva finalCamera;
 
 
@@ -41,33 +40,8 @@ static COLORREF colorBG=RGB(0, 64, 64), colorFG=RGB(128, 128, 128);
 static void initLocal(void) {
     Matric localMat, *mat=&localMat;
     Shapeva *shape = &finalModel;
+
     shapeCreatePreset(shape, 0);
-    //shapeDump(shape);
-
-    matricSetInitUnit(mat, 4, 4);
-    matricSetUnit(mat);
-    //matricSetScale(mat, 100);
-    matricSetScaleDim(mat, 100, 100, 100);
-
-
-    Shapeva shapeA;
-    Shapeva shapeB;
-    shapeTransCeqAxB(&shapeA, shape, mat);
-    matricSetUnit(mat);
-    matridRotate(mat, 15, 0, 0);
-    shapeTransCeqAxB(&shapeB, &shapeA, mat);
-    matridRotate(mat, 0, 30, 0);
-    shapeTransCeqAxB(&finalShape, &shapeB, mat);
-
-    shapeDump(&finalShape);
-    matricSetUnit(mat);
-    matricSetShift(mat, shiftX, shiftY, shiftZ);
-
-    //matridRotate(mat, rotateX, rotateY, rotateZ);
-    //matridShift(mat, shiftX, shiftY, shiftZ);
-    shapeTransCeqAxB(&finalCamera, &finalShape, mat);
-    shapeDump(&finalCamera);
-
 
     HDC hdc = hdcRegisted;
     renderDC = CreateCompatibleDC(hdc);
@@ -96,26 +70,21 @@ static int plugina_user(int msg, DWORD wParam, void *lParam) {
     return 0;
 }
 static int plugina_render(void *target) {
-    return 0;
-}
-static int plugina_display(void *target, int winW, int winH) {
     HDC hdc=(HDC)target;
 
-    //MoveToEx(renderDC, 10,100, NULL);
-    //LineTo(renderDC, 200, 100);
     SetRect(&renderRect, 0, 0, renderWidth, renderHeight);
     FillRect(renderDC, &renderRect, hBrushBG);
 
-    //rotateX = (rotateX+1)%360;
+    rotateX = (rotateX+1)%360;
     rotateY = (rotateY+1)%360;
+    rotateZ = (rotateY+1)%360;
 
     Matric localMat, *mat=&localMat;
     matricSetInitUnit(mat,4,4);
-    //matricSetShift(mat, shiftX, shiftY, shiftZ);
-
+    matridScale(mat, 100, 100, 100);
     matridRotate(mat, rotateX, rotateY, rotateZ);
-    //matridShift(mat, shiftX, shiftY, shiftZ);
-    shapeTransCeqAxB(&finalCamera, &finalShape, mat);
+    matridShift(mat, shiftX, shiftY, shiftZ);
+    shapeTransCeqAxB(&finalCamera, &finalModel, mat);
 
     Shapeva *sp = & finalCamera;
             /*   model 1: 1x1x1            model 2: 2x2x2
@@ -131,8 +100,8 @@ static int plugina_display(void *target, int winW, int winH) {
             */
 
     #define shapeLineDraw(hdc, sp, v0, v1) \
-        MoveToEx(hdc, sp->ma[v0][0]+shiftX, sp->ma[v0][1]+shiftY, NULL);\
-        LineTo(hdc, sp->ma[v1][0]+shiftX, sp->ma[v1][1]+shiftY)
+        MoveToEx(hdc, sp->ma[v0][0], sp->ma[v0][1], NULL);\
+        LineTo(hdc, sp->ma[v1][0], sp->ma[v1][1])
     shapeLineDraw(renderDC, sp, 0, 2);
     shapeLineDraw(renderDC, sp, 2, 3);
     shapeLineDraw(renderDC, sp, 3, 1);
@@ -145,8 +114,11 @@ static int plugina_display(void *target, int winW, int winH) {
     shapeLineDraw(renderDC, sp, 2, 6);
     shapeLineDraw(renderDC, sp, 3, 7);
     shapeLineDraw(renderDC, sp, 1, 5);
+    return 0;
+}
+static int plugina_display(void *target, int winW, int winH) {
+    HDC hdc=(HDC)target;
     BitBlt(hdc, 0, 0, renderWidth, renderHeight, renderDC, 0, 0, SRCCOPY);
-
     return 0;
 }
 static int plugina_registerObj(int category, void *obj) {
