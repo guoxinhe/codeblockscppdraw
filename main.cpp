@@ -483,7 +483,8 @@ void drawOnBGDC(HWND hWindow, HDC hdc, int index) {
  	FillRect(memoryDC, &rect, hBrushFG);
  	}
 
-    TESTPLUGIN.render(hdc);
+ 	TESTPLUGIN.user(1,0,0);
+    //TESTPLUGIN.render(NULL);
     TESTPLUGIN.display(memoryDC, clientWidth, clientHeight);
 	//在兼容DC中间位置输出字符串, 相当于把hbmp这个位图加上了文字标注,
     //DrawText(memoryDC,"Center Line Text", -1, &rect, DT_VCENTER|DT_SINGLELINE|DT_CENTER);
