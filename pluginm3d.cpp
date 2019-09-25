@@ -42,7 +42,7 @@ static Matric shapeAdjust;
 static void initLocal(void) {
     Shapeva *shape = &finalModel;
 
-    shapeCreatePreset(shape, 2);
+    shapeCreatePreset(shape, 1);
     int i;
     Matric *mat=&shapeAdjust;
     memset(&shapeAdjust, 0, sizeof(shapeAdjust));
@@ -107,6 +107,7 @@ static int plugina_user(int msg, DWORD wParam, void *lParam) {
 }
 static int plugina_render(void *target) {
     HDC hdc=(HDC)target;
+
     if(hdc==NULL) {
         hdc=renderDC;
     }

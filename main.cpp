@@ -254,6 +254,7 @@ static POINT ptMove;//mouse move
 static int guiDirty=0;//need render
 static int msgCount=0;//debug counter
 static int userControlShowTitle=0;
+static int userControlPause=0;
 static HWND hwndMain=NULL;
 static HBRUSH hBrushBG, hBrushFG;
 struct RenderBuffer {
@@ -486,7 +487,6 @@ void drawOnBGDC(HWND hWindow, HDC hdc, int index) {
  	FillRect(memoryDC, &rect, hBrushFG);
  	}
 
- 	TESTPLUGIN.user(1,0,0);
     //TESTPLUGIN.render(NULL);
     TESTPLUGIN.display(memoryDC, clientWidth, clientHeight);
     if(userControlShowTitle) {
@@ -516,7 +516,10 @@ void drawFromBGDC(HWND hWindow, HDC hdc, int index) {
     //SelectObject(renderBuffer[index].renderDC, renderBuffer[index].renderBmp);
 }
 int RenderBuffer(DWORD bufferIndex) {
-    guiDirty = 1;
+ 	if(userControlPause==0) {
+ 	    TESTPLUGIN.user(1,0,0);
+ 	    guiDirty = 1;
+ 	}
     if(guiDirty) {
         HDC         hdc;
         hdc = GetDC(hwndMain);
@@ -771,6 +774,9 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
             printf("Here is a Mouse LBUp message 0x%03X %d %d\n",message, ptEnd.x, ptEnd.y);
             if(message == WM_RBUTTONUP)
                 userControlShowTitle = 1 - userControlShowTitle;
+
+            if(message == WM_LBUTTONUP)
+                userControlPause = 1 - userControlPause;
             break;
         case WM_LBUTTONDBLCLK:
         case WM_RBUTTONDBLCLK:

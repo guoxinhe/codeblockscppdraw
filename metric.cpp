@@ -306,7 +306,8 @@ void shapeCreatePreset(Shapeva *sva, int preModel) {
                      |/           |/         |/           |/
                    7 .------------. 6      2 .------------. 6
             */
-            if(preModel==1) {//unit is 1, center is (0.5, 0.5,0.5)
+            if(preModel==1) {
+                //unit is 1, cube at (0,0,0) to (1,1,1), center (0.5, 0.5,0.5)
                 shapeSetVertex(sva, 0,  0,  1,  0);  //1
                 shapeSetVertex(sva, 1,  1,  1,  0);  //5
                 shapeSetVertex(sva, 2,  1,  1,  1);  //7
@@ -315,7 +316,27 @@ void shapeCreatePreset(Shapeva *sva, int preModel) {
                 shapeSetVertex(sva, 5,  1,  0,  0);  //4
                 shapeSetVertex(sva, 6,  1,  0,  1);  //6
                 shapeSetVertex(sva, 7,  0,  0,  1);  //2
-            } else {//unit is 2, center is (0,0,0)
+                //a mini cube at (0,0,0) to (0.1,0.1,0.1)
+                shapeSetVertex(sva, 8,    0,  0.1,    0);  //1
+                shapeSetVertex(sva, 9,  0.1,  0.1,    0);  //5
+                shapeSetVertex(sva,10,  0.1,  0.1,  0.1);  //7
+                shapeSetVertex(sva,11,    0,  0.1,  0.1);  //3
+                shapeSetVertex(sva,12,    0,    0,    0);  //0
+                shapeSetVertex(sva,13,  0.1,    0,    0);  //4
+                shapeSetVertex(sva,14,  0.1,    0,  0.1);  //6
+                shapeSetVertex(sva,15,    0,    0,  0.1);  //2
+                //a mini cube as front door
+                shapeSetVertex(sva,16, 0.25, 0.50, 0.75);  //1
+                shapeSetVertex(sva,17, 0.75, 0.50, 0.75);  //5
+                shapeSetVertex(sva,18, 0.75, 0.50, 1   );  //7
+                shapeSetVertex(sva,19, 0.25, 0.50, 1   );  //3
+                shapeSetVertex(sva,20, 0.25, 0.00, 0.75);  //0
+                shapeSetVertex(sva,21, 0.75, 0.00, 0.75);  //4
+                shapeSetVertex(sva,22, 0.75, 0.00, 1   );  //6
+                shapeSetVertex(sva,23, 0.25, 0.00, 1   );  //2
+                sva->row=24;
+            }
+            else {//unit is 2, center is (0,0,0)
                 shapeSetVertex(sva, 0, -1, -1, -1);  //4
                 shapeSetVertex(sva, 1, -1,  1, -1);  //0
                 shapeSetVertex(sva, 2, -1, -1,  1);  //7
