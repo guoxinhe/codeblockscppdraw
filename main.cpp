@@ -715,9 +715,29 @@ void onDraw(HWND hwnd)
 #endif // 0
 
 /*  This function is called by the Windows function DispatchMessage()  */
-
+char keyDown[0x1000];
+int capsLock=0, shiftDown=0, altDown=0, ctrlDown=0;
+enum keyboardScanCode {
+    SCAN_SPACE=0x39,
+    SCAN_TAB=0x0f, SCAN_CAPSLOCK=0x3a,SCAN_ENTER=0x1c,SCAN_BACK=0x0e,
+    SCAN_LALT=0xFF0, SCAN_RALT=0xFF1,
+    SCAN_LCTRL=0x1d, SCAN_RCTRL=0x11d,
+    SCAN_LSHIFT=0x2a, SCAN_RSHIFT=0x36,
+    SCAN_WIN=0x15b, SCAN_ATTR=0x15d,
+    //top line
+    SCAN_ESC=0x152,
+    SCAN_F1=0x3b,SCAN_F2=0x3c,SCAN_F3=0x3d,SCAN_F4=0x3e,
+    SCAN_F5=0x3f,SCAN_F6=0x40,SCAN_F7=0x41,SCAN_F8=0x42,
+    SCAN_F9=0x43,SCAN_F10_UNKNOWN=0xFF2,SCAN_F11=0x57,SCAN_F12=0x58,
+    //control area
+    SCAN_PRTSC=0x137,SCAN_SCRLK=0x46,SCAN_PAUSE=0x45,
+    SCAN_INS=0x152,SCAN_DEL=0x153,
+    SCAN_HOME=0x147,SCAN_END=0x14f,SCAN_PAGEUP=0x149, SCAN_PAGEDOWN=0x151,
+    SCAN_LEFT=0x14b,SCAN_RIGHT=0x14d,SCAN_UP=0x148,SCAN_DOWN=0x150,
+};
 LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+    WORD scanCode;
     msgCount++;
     if(hwndMain == NULL) {
         if(hwnd != mainCreatedHWND) {
@@ -754,8 +774,27 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
             printf("Here is a WM_PAINT 0x%03X ordered %d\n",message, msgCount++);
             break;
 
-        //mouse event
         case WM_KEYDOWN:
+            //check LOWORD(lParam) == 1
+            //check key scan code = HIWORD(lParam) & 0xFFF
+            scanCode=HIWORD(lParam) & 0xFFF;
+            keyDown[scanCode] = 1;
+            if(scanCode==SCAN_LALT   || scanCode==SCAN_RALT  ) altDown=1;
+            if(scanCode==SCAN_LCTRL  || scanCode==SCAN_RCTRL ) ctrlDown=1;
+            if(scanCode==SCAN_LSHIFT || scanCode==SCAN_RSHIFT) shiftDown=1;
+            printf("WM_KEYDOWN 0x%03X 0x%x 0x%x\n",message, LOWORD(lParam), HIWORD(lParam));
+            break;
+        case WM_KEYUP:
+            scanCode=HIWORD(lParam) & 0xFFF;
+            keyDown[scanCode] = 0;
+            if(scanCode==SCAN_CAPSLOCK) capsLock=1-capsLock;
+            if((scanCode==SCAN_LALT || scanCode==SCAN_RALT) && keyDown[SCAN_LALT]==0 && keyDown[SCAN_RALT]==0) altDown=0;
+            if((scanCode==SCAN_LCTRL || scanCode==SCAN_RCTRL) && keyDown[SCAN_LCTRL]==0 && keyDown[SCAN_RCTRL]==0) ctrlDown=0;
+            if((scanCode==SCAN_LSHIFT || scanCode==SCAN_RSHIFT) && keyDown[SCAN_LSHIFT]==0 && keyDown[SCAN_RSHIFT]==0) shiftDown=0;
+            printf("WM_KEYUP   0x%03X 0x%x 0x%x\n",message, LOWORD(lParam), HIWORD(lParam));
+            break;
+
+        //mouse event
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
         case WM_MBUTTONDOWN:
@@ -764,7 +803,6 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
             guiDirty++;
             printf("Here is a Mouse LBDn message 0x%03X %d %d\n",message, ptBegin.x, ptBegin.y);
             break;
-        case WM_KEYUP:
         case WM_LBUTTONUP:
         case WM_RBUTTONUP:
         case WM_MBUTTONUP:

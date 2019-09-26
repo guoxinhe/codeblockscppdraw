@@ -147,6 +147,18 @@ void matricSetScrewZy(Matric *mat, float scr) {
     matricSetUnit(mat);
     mat->ma[1][2]=scr;
 }
+void matricSetAwayXZ(Matric *mat, float distanceRatio) {
+    matricSetUnit(mat);
+    mat->ma[1][3]=distanceRatio;
+}
+void matricSetAwayXY(Matric *mat, float distanceRatio) {
+    matricSetUnit(mat);
+    mat->ma[2][3]=distanceRatio;
+}
+void matricSetAwayYZ(Matric *mat, float distanceRatio) {
+    matricSetUnit(mat);
+    mat->ma[0][3]=distanceRatio;
+}
 void matricSetMirrorXZ(Matric *mat) {
     matricSetUnit(mat);
     mat->ma[1][1]=-1.0f;
@@ -249,6 +261,29 @@ void matridScale(Matric *mat, float rx, float ry, float rz) {
     matricSetCopy(&a, mat);
     matricCeqAxB(mat, &a, &b);
 }
+void matridAway(Matric *mat, float awayx, float awayy, float awayz) {
+    CHECK_VALID_MATRIC(mat);
+    CHECK_VALID(4==mat->row && 4==mat->col);
+    Matric a, b;
+    matricSetInitUnit(&b, mat->row, mat->col);
+
+    if(awayx!=0) {
+        matricSetAwayYZ(&b, awayx);
+        matricSetCopy(&a, mat);
+        matricCeqAxB(mat, &a, &b);
+    }
+    else if(awayy!=0) {
+        matricSetAwayXZ(&b, awayy);
+        matricSetCopy(&a, mat);
+        matricCeqAxB(mat, &a, &b);
+    }
+    else if(awayz!=0) {
+        matricSetAwayXY(&b, awayz);
+        matricSetCopy(&a, mat);
+        matricCeqAxB(mat, &a, &b);
+    }
+}
+
 void shapeTransCeqAxB(Shapeva *dst, Shapeva *src, Matric *mat) {
     CHECK_VALID(dst!=NULL);
     CHECK_VALID(src!=NULL);

@@ -46,6 +46,9 @@ void matricSetScrewYx(Matric *mat, float scr);
 void matricSetScrewYz(Matric *mat, float scr);
 void matricSetScrewZx(Matric *mat, float scr);
 void matricSetScrewZy(Matric *mat, float scr);
+void matricSetAwayXZ(Matric *mat, float distanceRatio);
+void matricSetAwayXY(Matric *mat, float distanceRatio);
+void matricSetAwayYZ(Matric *mat, float distanceRatio);
 void matricSetMirrorXZ(Matric *mat);
 void matricSetMirrorXY(Matric *mat);
 void matricSetMirrorYZ(Matric *mat);
@@ -58,6 +61,7 @@ void matricDump(Matric *mat);
 void matridShift(Matric *mat, float x, float y, float z);
 void matridRotate(Matric *mat, int angx, int angy, int angz);
 void matridScale(Matric *mat, float rx, float ry, float rz);
+void matridAway(Matric *mat, float awayx, float awayy, float awayz);
 
 void shapeTransCeqAxB(Shapeva *c, Shapeva *a, Matric *b);
 void shapeClone(Shapeva *dst, Shapeva *src);
