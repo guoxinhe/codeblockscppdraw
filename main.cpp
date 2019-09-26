@@ -338,9 +338,7 @@ POINT xyToij(float x, float y,int w,int h) {
 	c.y = 0.5*h - y;
 	return c;
 }
-
-void BitBltRotate(HDC hdc, HDC hMemDC, HBITMAP hBitmap, int Width, int Heigh,int angle)
-{
+void BitBltRotate(HDC hdc, HDC hMemDC, HBITMAP hBitmap, int Width, int Heigh,int angle) {
 	BITMAP bm;
 	GetObject(hBitmap, sizeof(bm), &bm);
 	int WidthRow = bm.bmWidthBytes;//原位图的字节宽(即原位图的每行字节数)
@@ -719,13 +717,13 @@ char keyDown[0x1000];
 int capsLock=0, shiftDown=0, altDown=0, ctrlDown=0;
 enum keyboardScanCode {
     SCAN_SPACE=0x39,
-    SCAN_TAB=0x0f, SCAN_CAPSLOCK=0x3a,SCAN_ENTER=0x1c,SCAN_BACK=0x0e,
+    SCAN_CAPSLOCK=0x3a,
     SCAN_LALT=0xFF0, SCAN_RALT=0xFF1,
     SCAN_LCTRL=0x1d, SCAN_RCTRL=0x11d,
     SCAN_LSHIFT=0x2a, SCAN_RSHIFT=0x36,
     SCAN_WIN=0x15b, SCAN_ATTR=0x15d,
     //top line
-    SCAN_ESC=0x152,
+    SCAN_ESC=0x1,
     SCAN_F1=0x3b,SCAN_F2=0x3c,SCAN_F3=0x3d,SCAN_F4=0x3e,
     SCAN_F5=0x3f,SCAN_F6=0x40,SCAN_F7=0x41,SCAN_F8=0x42,
     SCAN_F9=0x43,SCAN_F10_UNKNOWN=0xFF2,SCAN_F11=0x57,SCAN_F12=0x58,
@@ -734,6 +732,14 @@ enum keyboardScanCode {
     SCAN_INS=0x152,SCAN_DEL=0x153,
     SCAN_HOME=0x147,SCAN_END=0x14f,SCAN_PAGEUP=0x149, SCAN_PAGEDOWN=0x151,
     SCAN_LEFT=0x14b,SCAN_RIGHT=0x14d,SCAN_UP=0x148,SCAN_DOWN=0x150,
+    //keyboard numeric line
+    SCAN_WAVE=0X29,
+    SCAN_N1=2,SCAN_N2=3,SCAN_N3=4,SCAN_N4=5,SCAN_N5=6,SCAN_N6=7,SCAN_N7=8,
+    SCAN_N8=9,SCAN_N9=10,SCAN_N0=11,SCAN_MINUS=12,SCAN_EQU=13,SCAN_BACK=0x0e,
+    SCAN_TAB=0x0f,
+    SCAN_Q=0x10,SCAN_W=0x11,SCAN_E=0x12,SCAN_R=0x13,SCAN_T=0x14,SCAN_Y=0x15,SCAN_U=0x16,SCAN_I=0x17,SCAN_O=0x18,SCAN_P=0x19,SCAN_LB=0x1A,SCAN_RB=0x1B,SCAN_VLINE=0x2b,
+    SCAN_A=0x1e,SCAN_S=0x1F,SCAN_D=0x20,SCAN_F=0x21,SCAN_G=0x22,SCAN_H=0x23,SCAN_J=0x24,SCAN_K=0x25,SCAN_L=0x26,SCAN_SEMI=0x27,SCAN_STRING=0x28,SCAN_ENTER=0x1c,
+    SCAN_Z=0x2c,SCAN_X=0x2d,SCAN_C=0x2e,SCAN_V=0x2f,SCAN_B=0x30,SCAN_N=0x31,SCAN_M=0x32,SCAN_COMMA=0x33,SCAN_DOT=0x34,SCAN_ASK=0x35,
 };
 LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {

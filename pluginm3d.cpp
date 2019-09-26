@@ -141,8 +141,11 @@ static int plugina_render(void *target) {
     float adjRatio = minofWin/length;//shapeAdjust.ma[3][3]
 
     matridScale(mat, adjRatio, adjRatio, adjRatio);
-    matridRotate(mat, rotateX, rotateY, rotateZ);
+    //matridRotate(mat, rotateX, rotateY, rotateZ);
+    matridRotate(mat, 180, rotateY, 0);
+    matridRotate(mat, 15,0,0);
     matridShift(mat, shiftX, shiftY, shiftZ);
+    //matridAway(mat, 0, -0.58, 0);
     shapeTransCeqAxB(&finalCamera, &finalShape, mat);
 
     Shapeva *sp = &finalCamera;
