@@ -34,10 +34,12 @@ static HDC hdcRegisted=NULL;
 static     HDC renderDC;
 static     HBITMAP renderBmp;
 static const DWORD renderWidth=400, renderHeight=400;
-static HBRUSH hBrushBG, hBrushFG;
-static HPEN hNullPen;
-static RECT renderRect;
+static COLORREF colorPall[16];
 static COLORREF colorBG=RGB(0, 64, 64), colorFG=RGB(128, 128, 128);
+static HPEN hNullPen, colorPen[16];
+static HBRUSH hBrushBG, hBrushFG;
+static HBRUSH hNullBrush, colorBrush[16];
+static RECT renderRect;
 static Matric shapeAdjust;
 static void initLocal(void) {
     Shapeva *shape = &finalModel;
@@ -83,16 +85,38 @@ static void initLocal(void) {
     SetRect(&renderRect, 0, 0, renderWidth, renderHeight);
     FillRect(renderDC, &renderRect, hBrushBG);
     hNullPen = CreatePen(PS_NULL, 1, 0); //for not draw border
+    hNullBrush = (HBRUSH)GetStockObject(NULL_BRUSH);//for not fill center
 }
 
 static int plugina_open(int mode) {
+    int i,r,g,b;
+    for(i=0;i<16;i++) {
+        if(i==8) {
+            r=g=b=63; //dark gray
+        //} else if(i==15) { r=g=b=191; //light gray
+        } else {
+            if(i&4) r=255; else r=0;
+            if(i&2) g=255; else g=0;
+            if(i&1) b=255; else b=0;
+            if(i&8) {r/=2;g/=2;b/=2;}
+        }
+        colorPall[i] = RGB(r,g,b);
+        colorPen[i] = CreatePen(PS_SOLID,1,colorPall[i]);
+        colorBrush[i] = CreateSolidBrush(colorPall[i]);
+    }
     return 0;
 }
 static int plugina_close(void) {
     DeleteObject(hBrushBG);
     DeleteObject(hBrushFG);
+    DeleteObject(hNullBrush);
     DeleteObject(hNullPen);
     DeleteDC(renderDC);
+    int i;
+    for(i=0;i<16;i++) {
+        DeleteObject(colorPen[i]);
+        DeleteObject(colorBrush[i]);
+    }
     return 0;
 }
 static int plugina_user(int msg, DWORD wParam, void *lParam) {
@@ -162,8 +186,8 @@ static int plugina_render(void *target) {
                    7 .------------. 6      2 .------------. 6
             */
 
-    HPEN linePen = CreatePen(PS_SOLID,1,RGB(0,128,0)); //set draw line's color
-    HPEN oldPen = (HPEN)SelectObject(hdc,linePen);
+
+    HPEN oldPen = (HPEN)SelectObject(hdc,colorPen[8]);
     #define shapeLineDraw(hdc, sp, v0, v1) \
         MoveToEx(hdc, sp->ma[v0][0], sp->ma[v0][1], NULL);\
         LineTo(hdc, sp->ma[v1][0], sp->ma[v1][1])
@@ -206,7 +230,8 @@ static int plugina_render(void *target) {
         LineTo(hdc, sp->ma[0][0], sp->ma[0][1]);
     }
 
-
+/*
+    HPEN linePen = CreatePen(PS_SOLID,1,RGB(0,128,0)); //set draw line's color
 	HBRUSH newBrush = CreateSolidBrush(RGB(255,0,0));//set fill range color
 	HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, newBrush);
 	HBRUSH newBrush2 = CreateSolidBrush(RGB(0, 255, 255));
@@ -216,16 +241,16 @@ static int plugina_render(void *target) {
     pt[2].x=sp->ma[2][0];pt[2].y=sp->ma[2][1];
     pt[3].x=sp->ma[3][0];pt[3].y=sp->ma[3][1];
     HRGN hRgn = CreatePolygonRgn( pt, 4, WINDING );
-    FillRgn( hdc, hRgn, newBrush2 );
-    DeleteObject( hRgn );
+    FillRgn(hdc, hRgn, newBrush2 );
+    DeleteObject(hRgn );
 
     pt[0].x=sp->ma[8][0];pt[0].y=sp->ma[8][1];
     pt[1].x=sp->ma[9][0];pt[1].y=sp->ma[9][1];
     pt[2].x=sp->ma[10][0];pt[2].y=sp->ma[10][1];
     pt[3].x=sp->ma[11][0];pt[3].y=sp->ma[11][1];
     hRgn = CreatePolygonRgn( pt, 4, WINDING );
-    PaintRgn( hdc, hRgn );
-
+    PaintRgn(hdc, hRgn);
+    DeleteObject(hRgn);
 	//this group fill whole range with selected brush
 	Rectangle(hdc,40,40,100,100);
 	SelectObject(hdc, newBrush2);
@@ -244,13 +269,13 @@ static int plugina_render(void *target) {
 	FillRect(hdc, &r, newBrush);
 	Ellipse(hdc, 300, 300, 400, 400);
 
-
 	SelectObject(hdc, oldBrush);
-    SelectObject(hdc, oldPen);
-    DeleteObject(linePen);
 	DeleteObject(newBrush);
 	DeleteObject(newBrush2);
+    DeleteObject(linePen);
+*/
 
+    SelectObject(hdc, oldPen);
     return 0;
 }
 static int plugina_display(void *target, int winW, int winH) {

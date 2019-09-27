@@ -65,7 +65,8 @@ DWORD WINAPI ThreadFuncRender(LPVOID lpParam) {
                 meetDisplayBusy=1;
         }
         exSet(&readerBusy,0);
-        Sleep((DWORD)lpParam);//in ms
+        //Sleep((DWORD)lpParam);//in ms
+        Sleep((DWORD)10);//in ms
     }
     return 0;
 }
@@ -85,8 +86,10 @@ DWORD WINAPI ThreadFuncDisplay(LPVOID lpParam) {
             //    displayBufferName[displayBusyOn],
             //    displayedCount, readeredCount);
             exSet(&displayBusy,0);
-        } else
-            Sleep((DWORD)lpParam);//in ms
+        } else {
+            //Sleep((DWORD)lpParam);//in ms
+            Sleep((DWORD)15);//in ms
+        }
     }
     return 0;
 }
@@ -94,7 +97,8 @@ DWORD WINAPI ThreadFuncService(LPVOID lpParam) {
     //TODO: add thread enter once code
     while(mainThreadLive != 0) {
         //TODO: check if need render
-        Sleep((DWORD)lpParam);//in ms
+        //Sleep((DWORD)lpParam);//in ms
+        Sleep((DWORD)20);//in ms
     }
     //TODO: add thread leave once code
     return 0;
@@ -199,14 +203,14 @@ int WINAPI WinMain (HINSTANCE hThisInstance,
 
     /* The class is registered, let's create the program*/
     hwnd = CreateWindowEx (
-           0,                   /* Extended possibilites for variation */
-           szClassName,         /* Classname */
+           0,                   /* Extended possibilities for variation */
+           szClassName,         /* Class name */
            _T("Code::Blocks Template Windows App"),       /* Title Text */
            WS_OVERLAPPEDWINDOW, /* default window */
            CW_USEDEFAULT,       /* Windows decides the position */
            CW_USEDEFAULT,       /* where the window ends up on the screen */
-           544,                 /* The programs width */
-           375,                 /* and height in pixels */
+           640,                 /* The window client area width */
+           400,                 /* and height in pixels */
            HWND_DESKTOP,        /* The window is a child-window to desktop */
            NULL,                /* No menu */
            hThisInstance,       /* Program Instance handler */

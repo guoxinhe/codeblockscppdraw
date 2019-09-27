@@ -38,8 +38,11 @@
 			<Add library="comctl32" />
 		</Linker>
 		<Unit filename="main.cpp" />
+		<Unit filename="metric.cpp" />
+		<Unit filename="metric.h" />
 		<Unit filename="plugin.h" />
 		<Unit filename="plugina.cpp" />
+		<Unit filename="pluginm3d.cpp" />
 		<Unit filename="systime.c">
 			<Option compilerVar="CC" />
 		</Unit>
