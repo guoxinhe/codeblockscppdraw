@@ -154,7 +154,7 @@ static int plugina_render(void *target) {
 
     //scale, and rotate model to final shape, and put to final position
     matricSetUnit(mat);
-    matricSetMirrorXZ(mat); //y is upside down in display
+    //matricSetMirrorXZ(mat); //y is upside down in display
 
     float length;
     length=shapeAdjust.ma[3][0];
@@ -166,6 +166,8 @@ static int plugina_render(void *target) {
     float adjRatio = minofWin/length;//shapeAdjust.ma[3][3]
 
     matridScale(mat, adjRatio, adjRatio, adjRatio);
+    matridRotate(mat, 180, 0, 0); //change to screen view
+
     //matridRotate(mat, rotateX, rotateY, rotateZ);
     matridRotate(mat, 0, rotateY, 0);
     matridRotate(mat, 15,0,0);
