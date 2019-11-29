@@ -321,6 +321,29 @@ void destroyWindowResource(HWND hwnd) {
         // 4. Õ∑≈ª∫≥Â«¯DC
         DeleteDC(renderBuffer[i].renderDC);
     }
+
+    const char *systemBusName[]={"?","8","16","?","32","?","?","?","64"};
+    const char *ptr=(const char *)systemBusName[sizeof(void *)];
+    printf("sizeof(void *)=%d, is %s bits system, ptr=%p, =%llx\n",
+        sizeof(void *), ptr, ptr, (unsigned long long)ptr);
+    size_t mallocSize=3UL<<30;
+    ptr=(const char *)malloc(mallocSize);
+
+    if(ptr) {
+        void *ptr_end=(void *)ptr+mallocSize-1;
+        unsigned long long bus_end=(unsigned long long)ptr_end;
+        printf("malloc() ptr=%p, ptr_end=%p\n", ptr, ptr_end);
+        printf("Bus address of ptr_end is 0x%llx, hi=0x%lx, low=0x%lx\n",
+            bus_end, (unsigned long)(bus_end>>32), (unsigned long)bus_end);
+        unsigned long bus_hi=(unsigned long)((unsigned long long)ptr>>32);
+        unsigned long bus_lo=(unsigned long)((unsigned long long)ptr);
+        printf("Bus address of ptr is 0x%llx, hi=0x%lx, low=0x%lx\n",
+            (unsigned long long)ptr, bus_hi, bus_lo);
+
+        unsigned long long bus_ptr=((unsigned long long)bus_hi<<32) + bus_lo;
+        free((void *)bus_ptr);
+        printf("freed memory of %d GB\n", mallocSize>>30);
+    }
 }
 
 void drawDCGrid(HDC hdc, int rows, int cols, int fillRandomColor) {
