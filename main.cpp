@@ -33,6 +33,47 @@
 int RenderBuffer(DWORD bufferIndex);
 void DisplayBuffer(DWORD bufferIndex);
 
+class DisplayManager {
+    long canvasDirty, canvasFresh;
+    //if(canvasDirty) need render, after render canvasDirty=false, canvasFresh=true;
+    //if(canvasFresh) need display, after display, canvasFresh=false;
+    long displayOn;
+    long renderCount=0, displayCount=0;
+public:
+    DisplayManager() {
+        canvasDirty=0;
+        displayOn=0;
+        printf("Hello, I am created\n");
+    };
+    int getDisplayBuffer() {
+    }
+    int getRenderBuffer() {
+    }
+    int render() {
+        if(canvasDirty==0)
+            return 0;
+        //select canvas
+        //lock canvas
+        //do render
+        //unlock canvas
+        canvasDirty=0;
+        canvasFresh=1;
+
+        renderCount++;
+        return 0;
+    }
+    int display() {
+        if(canvasFresh) {
+
+        }
+
+        displayCount++;
+        return 0;
+    }
+};
+
+DisplayManager *displayManager=new DisplayManager();
+
 #define WIN32_LEAN_AND_MEAN
 int mainThreadLive=1;
 DWORD displayBusy=0;
@@ -47,6 +88,7 @@ const char *displayBufferName[]={"[    -- ]","[ --    ]"};
 DWORD WINAPI ThreadFuncRender(LPVOID lpParam) {
     int meetDisplayBusy=0;
     while(mainThreadLive != 0) {
+        displayManager->render();
         //TODO: check if need render
         exSet(&readerBusy,1);
 
@@ -66,7 +108,7 @@ DWORD WINAPI ThreadFuncRender(LPVOID lpParam) {
         }
         exSet(&readerBusy,0);
         //Sleep((DWORD)lpParam);//in ms
-        Sleep((DWORD)10);//in ms
+        Sleep((DWORD)15);//in ms
     }
     return 0;
 }
@@ -75,6 +117,7 @@ DWORD WINAPI ThreadFuncDisplay(LPVOID lpParam) {
     DWORD displayedOn=-1;
 
     while(mainThreadLive != 0) {
+        displayManager->display();
         //TODO: check if need render
         displayBusyOn=1-readerBusyOn;
         if(displayedOn != displayBusyOn) {
@@ -88,7 +131,7 @@ DWORD WINAPI ThreadFuncDisplay(LPVOID lpParam) {
             exSet(&displayBusy,0);
         } else {
             //Sleep((DWORD)lpParam);//in ms
-            Sleep((DWORD)15);//in ms
+            Sleep((DWORD)1);//in ms
         }
     }
     return 0;
@@ -261,14 +304,14 @@ static int userControlShowTitle=0;
 static int userControlPause=0;
 static HWND hwndMain=NULL;
 static HBRUSH hBrushBG, hBrushFG;
-struct RenderBuffer {
+struct RenderBufferDevice {
     HDC renderDC;
     HBITMAP renderBmp;
     //other attribute for this buffer
     DWORD renderCount, displayCount;
     COLORREF bgColor;
 };
-struct RenderBuffer renderBuffer[2];//2 buffer for ping pang render/display
+struct RenderBufferDevice renderBuffer[2];//2 buffer for ping pang render/display
 
 void createGlobalResource() {
     hBrushBG = CreateSolidBrush(RGB(16,16,16));
