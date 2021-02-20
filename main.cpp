@@ -29,45 +29,224 @@
 #define TWOPI   (2*3.14159)
 #define TWO_PI  TWOPI
 
+static int threadRunFlag=1;
+static int wastTimeCount=0;
+#define ThreadSpinLockWait(a) do{int _to=(a); while(_to-->0) {wastTimeCount++;}} while(0)
+/**
+ * @return if success, used wait counter, for statistics, else assert fail
+ */
+void spinLock(volatile long *pLock) {
+    long timeout=0x10000000;
+    long retVal;
+    //QWORD now=spinLockWaitCycleCounter;
+    do {
+        if(*pLock == 0) {
+            retVal = exInc(pLock);
+            if(retVal == 1) //success locked
+                break;
+            exDec(pLock);//avoid dead lock by other threads
+        }
+
+        //wait a few CPU cycle here
+        ThreadSpinLockWait(1);
+    }while(threadRunFlag && timeout-->0);
+
+    //if(timeout<=0)
+    //    AssertThrow(timeout>0);
+    //return (TWORD)(spinLockWaitCycleCounter-now);
+}
+/**
+ * a timeout version of spinLock(pLock)
+ * @return if success, return 0, else return -1
+ */
+int spinLockTry(volatile long *pLock, long timeout) {
+    long retVal;
+    while(threadRunFlag) {
+        if(*pLock == 0) {
+            retVal = exInc(pLock);
+            if(retVal == 1) //success locked
+                return 0;
+            exDec(pLock);//avoid dead lock by other threads
+        }
+        if(timeout<=0)
+            break;
+        timeout--;
+        //wait a few CPU cycle here
+        ThreadSpinLockWait(1);
+    }
+
+    return -1;
+}
+
+void spinUnlock(volatile long *pLock) {
+    exDec(pLock);
+}
+
 //thread used external callback function
 int RenderBuffer(DWORD bufferIndex);
 void DisplayBuffer(DWORD bufferIndex);
 
+struct RenderBufferDevice {
+    HDC renderDC;
+    HBITMAP renderBmp;
+    //other attribute for this buffer
+    DWORD renderCount, displayCount;
+    COLORREF bgColor;
+};
+
 class DisplayManager {
-    long canvasDirty, canvasFresh;
-    //if(canvasDirty) need render, after render canvasDirty=false, canvasFresh=true;
-    //if(canvasFresh) need display, after display, canvasFresh=false;
-    long displayOn;
-    long renderCount=0, displayCount=0;
+private:
+    long statusLock;
+    long renderDirty;
+
+    long renderCount;
+    long renderBusy;
+    long renderBusyIndex;
+    long renderFreshIndex;
+    long renderNext;
+
+    long displayDirty;
+    long displayBusy;
+    long displayBusyIndex;
+    long displayCount;
+
+    int renderStatisCount[2];
+
+    //------------------------------------------------------
+    HWND hwndHost;
+    //2 buffer for ping pang render/display
+    struct RenderBufferDevice renderBuffer[2];
+    HBRUSH hBrushBG, hBrushFG;
 public:
     DisplayManager() {
-        canvasDirty=0;
-        displayOn=0;
-        printf("Hello, I am created\n");
+        statusLock=0;
+
+        renderDirty=1;
+        renderCount=0;
+        renderBusy=0;
+        renderFreshIndex=0;
+        renderBusyIndex=0;
+
+        displayDirty=0;
+        displayBusy=0;
+        displayBusyIndex=0;
+        displayCount=0;
+
+        renderStatisCount[0]=0;
+        renderStatisCount[1]=0;
     };
-    int getDisplayBuffer() {
+    void onCreate(HWND hwnd) {
+        hwndHost = hwnd;
+        HDC hdc = GetDC(hwnd);
+
+        int i;
+        DWORD renderWidth=2560*2, renderHeight=1080*2;
+        RECT rect;
+        SetRect(&rect, 0, 0, renderWidth, renderHeight);
+        COLORREF bgColor[2]={RGB(128,0,0),RGB(0,0,128)};
+        for(i=0;i<2;i++) {
+            renderBuffer[i].renderCount=0;
+            renderBuffer[i].displayCount=0;
+            renderBuffer[i].bgColor=bgColor[i];
+            // 1.创建兼容缓冲区
+            renderBuffer[i].renderDC = CreateCompatibleDC(hdc);   // 创建兼容DC
+            // 创建兼容位图画布
+            renderBuffer[i].renderBmp = CreateCompatibleBitmap(hdc, renderWidth, renderHeight);
+            if(renderBuffer[i].renderBmp==NULL) {
+                printf("Fatal error, out of memory when CreateCompatibleBitmap(hdc, 2560*2, 1080*2);");
+            } else {
+                SelectObject(renderBuffer[i].renderDC, renderBuffer[i].renderBmp);    // 选入
+                //debug optional initialize to a back ground color
+                HBRUSH hBrushTmp=CreateSolidBrush(bgColor[i]);
+                FillRect(renderBuffer[i].renderDC, &rect, hBrushTmp);
+                DeleteObject(hBrushTmp);
+            }
+        }
+
+        ReleaseDC(hwnd, hdc);
+
+        hBrushBG = CreateSolidBrush(RGB(16,16,16));
+        hBrushFG = CreateSolidBrush(RGB(116,116,116));
     }
-    int getRenderBuffer() {
+    void onDestroy() {
+        int i;
+        for(i=0;i<2;i++) {
+            // 4.释放缓冲区DC
+            if(renderBuffer[i].renderDC) {
+                DeleteDC(renderBuffer[i].renderDC);
+                renderBuffer[i].renderDC=NULL;
+            }
+        }
+        if(hBrushBG) {
+            DeleteObject(hBrushBG);
+            hBrushBG = NULL;
+        }
+        if(hBrushFG) {
+            DeleteObject(hBrushFG);
+            hBrushFG = NULL;
+        }
+
+        printf("DisplayManager: renderCount=%d(%d,%d), displayCount=%d\n",
+            renderCount, renderStatisCount[0], renderStatisCount[1],
+            displayCount);
     }
     int render() {
-        if(canvasDirty==0)
+        if(renderDirty==0)
             return 0;
-        //select canvas
-        //lock canvas
-        //do render
-        //unlock canvas
-        canvasDirty=0;
-        canvasFresh=1;
+        exSet(&renderDirty,0);
+        spinLock((volatile long *)&statusLock);
+        exSet(&renderBusy,1);
+        if(displayBusy) {
+            renderBusyIndex = 1-displayBusyIndex;
+        } else {
+            renderBusyIndex = 1-renderFreshIndex;
+        }
+        spinUnlock((volatile long *)&statusLock);
 
+        //------------------------------- render action
+        //HDC         hdc;
+        //hdc = GetDC(hwndHost);
+        //drawOnBGDC(hwndHost, hdc, bufferIndex);
+        HDC memoryDC=renderBuffer[renderBusyIndex].renderDC;
+        RECT		rect;
+        //draw whole background first
+        SetRect(&rect, 0, 0, 640, 480);
+        //select on of next to erase background, or left it blink
+        FillRect(memoryDC, &rect, hBrushBG);
+        char title[256];
+        sprintf(title, "  Render #%d #%d %d  ",
+            renderBusyIndex, renderCount, renderStatisCount[renderBusyIndex]);
+        DrawText(memoryDC, title, -1, &rect, DT_TOP|DT_SINGLELINE|DT_CENTER);
+        //ReleaseDC(hwndHost, hdc);
+
+        //after render:
         renderCount++;
+        renderStatisCount[renderBusyIndex]++;
+        exSet(&renderFreshIndex,renderBusyIndex);
+        exSet(&renderBusy,0);
+        exSet(&displayDirty,1);
         return 0;
     }
     int display() {
-        if(canvasFresh) {
+        if(displayDirty==0)
+            return 0;
+        exSet(&displayDirty,0);
+        spinLock((volatile long *)&statusLock);
+        exSet(&displayBusy,1);
+        exSet(&displayBusyIndex,renderFreshIndex);
+        spinUnlock((volatile long *)&statusLock);
 
-        }
+        //------------------------------- render action
+        HDC         hdc;
+        hdc = GetDC(hwndHost);
+        HDC memoryDC=renderBuffer[displayBusyIndex].renderDC;
+        BitBlt(hdc, 0, 0, 640, 480, memoryDC, 0, 0, SRCCOPY);
+        ReleaseDC(hwndHost, hdc);
 
+        //after display
         displayCount++;
+        exSet(&displayBusy,0);
+        exSet(&renderDirty,1);
         return 0;
     }
 };
@@ -117,7 +296,6 @@ DWORD WINAPI ThreadFuncDisplay(LPVOID lpParam) {
     DWORD displayedOn=-1;
 
     while(mainThreadLive != 0) {
-        displayManager->display();
         //TODO: check if need render
         displayBusyOn=1-readerBusyOn;
         if(displayedOn != displayBusyOn) {
@@ -133,6 +311,7 @@ DWORD WINAPI ThreadFuncDisplay(LPVOID lpParam) {
             //Sleep((DWORD)lpParam);//in ms
             Sleep((DWORD)1);//in ms
         }
+        displayManager->display();
     }
     return 0;
 }
@@ -265,6 +444,7 @@ int WINAPI WinMain (HINSTANCE hThisInstance,
         return -1;
     }
     mainCreatedHWND = hwnd;
+    displayManager->onCreate(hwnd);
     createGlobalResource();
     createWindowResource(hwnd);
     /* Make the window visible on the screen */
@@ -304,13 +484,6 @@ static int userControlShowTitle=0;
 static int userControlPause=0;
 static HWND hwndMain=NULL;
 static HBRUSH hBrushBG, hBrushFG;
-struct RenderBufferDevice {
-    HDC renderDC;
-    HBITMAP renderBmp;
-    //other attribute for this buffer
-    DWORD renderCount, displayCount;
-    COLORREF bgColor;
-};
 struct RenderBufferDevice renderBuffer[2];//2 buffer for ping pang render/display
 
 void createGlobalResource() {
@@ -322,6 +495,7 @@ void destroyGlobalResource() {
 	DeleteObject(hBrushFG);
     hBrushBG = NULL;
     hBrushFG = NULL;
+    displayManager->onDestroy();
 
     extern int matridTest(void);
     //matridTest();
@@ -584,7 +758,7 @@ void drawMiscShape(HDC hdc) {
 		MoveToEx(hdc, 0, clientHeight, NULL);
 		LineTo(hdc, clientWidth, 0);
 		Ellipse(hdc, clientWidth/8, clientHeight/8, 7*clientWidth/8, 7*clientHeight/8);
-		RoundRect(hdc, clientWidth/4, clientHeight/4, 3*clientWidth/4, 3*clientHeight/4, clientWidth/4, clientHeight/4);
+		RoundRect(hdc, clientWidth/4, cliedisplayManagerntHeight/4, 3*clientWidth/4, 3*clientHeight/4, clientWidth/4, clientHeight/4);
 }
 
 void drawSineWave(HDC hdc) {
